@@ -40,16 +40,16 @@ class HomeViewModel {
     fun filteredAccidents(): List<AccidentRecord> {
         var list = accidents
         if (accidentDateFilter.isNotBlank()) {
-            list = list.filter { it.datetime.toLocalDate().toString().contains(accidentDateFilter) }
+            list = list.filter { it.dateTime.toLocalDate().toString().contains(accidentDateFilter) }
         }
-        return if (accidentSortAsc) list.sortedBy { it.datetime } else list.sortedByDescending { it.datetime }
+        return if (accidentSortAsc) list.sortedBy { it.dateTime } else list.sortedByDescending { it.dateTime }
     }
 
     fun filteredViolations(): List<ViolationRecord> {
         var list = violations
         if (violationDateFilter.isNotBlank()) {
-            list = list.filter { it.datetime.toLocalDate().toString().contains(violationDateFilter) }
+            list = list.filter { it.dateTime.toLocalDate().toString().contains(violationDateFilter) }
         }
-        return if (violationSortAsc) list.sortedBy { it.datetime } else list.sortedByDescending { it.datetime }
+        return if (violationSortAsc) list.sortedBy { it.dateTime } else list.sortedByDescending { it.dateTime }
     }
 }
