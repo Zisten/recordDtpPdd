@@ -26,7 +26,16 @@ kotlin {
         }
         jvmMain.dependencies {
             implementation(compose.desktop.currentOs)
+            implementation(compose.materialIconsExtended)
             implementation(libs.kotlinx.coroutinesSwing)
+            // Database
+            implementation(libs.exposed.core)
+            implementation(libs.exposed.dao)
+            implementation(libs.exposed.jdbc)
+            implementation(libs.exposed.java.time)
+            implementation(libs.mysql.connector)
+            // Logging
+            implementation(libs.slf4j.simple)
         }
     }
 }
