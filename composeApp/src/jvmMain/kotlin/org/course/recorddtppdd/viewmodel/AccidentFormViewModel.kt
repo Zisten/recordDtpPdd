@@ -5,6 +5,7 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import org.course.recorddtppdd.db.Repository
+import java.time.LocalDate
 
 /** Данные транспортного средства (для каждого участника) */
 data class VehicleFormData(
@@ -109,59 +110,110 @@ class AccidentFormViewModel {
                 "${accidentDate}T${accidentTime.padStart(5, '0')}:00"
             )
             val circumstances = buildCircumstancesJson(selectedCircumstances.toList())
+            val witnessesInfo = listOf(witnessesName, witnessesAddress)
+                .map { it.trim() }
+                .filter { it.isNotBlank() }
+                .joinToString(", ")
+                .ifBlank { null }
+            val explanation = buildString {
+                if (accidentDescription.isNotBlank()) append(accidentDescription.trim())
+                if (guiltySide.isNotBlank()) {
+                    if (isNotEmpty()) append("\n")
+                    append("Виновный: $guiltySide")
+                }
+            }.ifBlank { null }
 
             val accidentId = Repository.insertAccident(
-                locationStreet = locationStreet,
-                locationBuilding = locationBuilding,
-                datetime = dt,
-                witnessesName = if (noWitnesses) "" else witnessesName,
-                witnessesAddress = if (noWitnesses) "" else witnessesAddress,
-                description = accidentDescription,
-                circumstances = circumstances,
-                guiltySide = guiltySide,
-                officerId = officerId
+                officerId = officerId,
+                typeId = null,
+                dateTime = dt,
+                street = locationStreet,
+                house = locationBuilding.ifBlank { null },
+                witnessesInfo = if (noWitnesses) null else witnessesInfo,
+                circumstancesJson = circumstances,
+                explanation = explanation
             )
 
             // Участник A
             val driverAId = Repository.getOrCreateDriver(
-                driverA.fullName, driverA.birthdate, driverA.address, driverA.phone
+                fullName = driverA.fullName,
+                birthDate = parseDateOrNull(driverA.birthdate),
+                registrationAddress = driverA.address.ifBlank { null },
+                actualAddress = driverA.address.ifBlank { null },
+                phone = driverA.phone.ifBlank { null }
             )
             val vehicleAId = Repository.getOrCreateVehicle(
-                vehicleA.make, vehicleA.model, vehicleA.vin,
-                vehicleA.numberPlate, vehicleA.sts, vehicleA.ownerName, vehicleA.ownerAddress
+                ownerId = null,
+                brand = vehicleA.make,
+                model = vehicleA.model,
+                numberPlate = vehicleA.numberPlate,
+                vin = vehicleA.vin.ifBlank { null },
+                regCertificate = vehicleA.sts.ifBlank { null },
+                insuranceName = driverA.insCompany.ifBlank { null },
+                insurancePolicy = driverA.insPolicy.ifBlank { null },
+                insuranceExpiry = parseDateOrNull(driverA.insExpiry),
+                hasHullInsurance = driverA.hasHull
             )
-            val licenseAId = if (driverA.licSeries.isNotBlank()) {
-                Repository.insertLicense(driverAId, driverA.licSeries, driverA.licNumber,
-                    driverA.licCategory, driverA.licIssueDate)
-            } else null
+            if (driverA.licSeries.isNotBlank() && driverA.licNumber.isNotBlank()) {
+                val issueDate = parseDateOrNull(driverA.licIssueDate) ?: LocalDate.now()
+                Repository.insertLicense(
+                    driverId = driverAId,
+                    series = driverA.licSeries,
+                    number = driverA.licNumber,
+                    category = driverA.licCategory.ifBlank { null },
+                    issueDate = issueDate
+                )
+            }
 
             Repository.insertParticipant(
-                accidentId = accidentId, side = "A",
-                driverId = driverAId, vehicleId = vehicleAId,
-                damages = damagesA, notes = notesA, licenseId = licenseAId,
-                insuranceCompany = driverA.insCompany, insurancePolicy = driverA.insPolicy,
-                insuranceExpiry = driverA.insExpiry, hasHull = driverA.hasHull
+                accidentId = accidentId,
+                driverId = driverAId,
+                vehicleId = vehicleAId,
+                role = 'A',
+                impactSpot = null,
+                damageDetails = damagesA.ifBlank { null },
+                remarks = notesA.ifBlank { null }
             )
 
             // Участник B
             val driverBId = Repository.getOrCreateDriver(
-                driverB.fullName, driverB.birthdate, driverB.address, driverB.phone
+                fullName = driverB.fullName,
+                birthDate = parseDateOrNull(driverB.birthdate),
+                registrationAddress = driverB.address.ifBlank { null },
+                actualAddress = driverB.address.ifBlank { null },
+                phone = driverB.phone.ifBlank { null }
             )
             val vehicleBId = Repository.getOrCreateVehicle(
-                vehicleB.make, vehicleB.model, vehicleB.vin,
-                vehicleB.numberPlate, vehicleB.sts, vehicleB.ownerName, vehicleB.ownerAddress
+                ownerId = null,
+                brand = vehicleB.make,
+                model = vehicleB.model,
+                numberPlate = vehicleB.numberPlate,
+                vin = vehicleB.vin.ifBlank { null },
+                regCertificate = vehicleB.sts.ifBlank { null },
+                insuranceName = driverB.insCompany.ifBlank { null },
+                insurancePolicy = driverB.insPolicy.ifBlank { null },
+                insuranceExpiry = parseDateOrNull(driverB.insExpiry),
+                hasHullInsurance = driverB.hasHull
             )
-            val licenseBId = if (driverB.licSeries.isNotBlank()) {
-                Repository.insertLicense(driverBId, driverB.licSeries, driverB.licNumber,
-                    driverB.licCategory, driverB.licIssueDate)
-            } else null
+            if (driverB.licSeries.isNotBlank() && driverB.licNumber.isNotBlank()) {
+                val issueDate = parseDateOrNull(driverB.licIssueDate) ?: LocalDate.now()
+                Repository.insertLicense(
+                    driverId = driverBId,
+                    series = driverB.licSeries,
+                    number = driverB.licNumber,
+                    category = driverB.licCategory.ifBlank { null },
+                    issueDate = issueDate
+                )
+            }
 
             Repository.insertParticipant(
-                accidentId = accidentId, side = "B",
-                driverId = driverBId, vehicleId = vehicleBId,
-                damages = damagesB, notes = notesB, licenseId = licenseBId,
-                insuranceCompany = driverB.insCompany, insurancePolicy = driverB.insPolicy,
-                insuranceExpiry = driverB.insExpiry, hasHull = driverB.hasHull
+                accidentId = accidentId,
+                driverId = driverBId,
+                vehicleId = vehicleBId,
+                role = 'B',
+                impactSpot = null,
+                damageDetails = damagesB.ifBlank { null },
+                remarks = notesB.ifBlank { null }
             )
 
             saveSuccess = true
@@ -202,3 +254,8 @@ class AccidentFormViewModel {
 /** Кодирует список строк в JSON-массив */
 fun buildCircumstancesJson(items: List<String>): String =
     "[${items.joinToString(",") { "\"${it.replace("\"", "\\\"")}\"" }}]"
+
+private fun parseDateOrNull(value: String): LocalDate? =
+    value.trim().takeIf { it.isNotBlank() }?.let {
+        runCatching { LocalDate.parse(it) }.getOrNull()
+    }
