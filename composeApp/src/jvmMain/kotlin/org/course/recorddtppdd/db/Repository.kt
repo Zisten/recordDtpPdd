@@ -27,7 +27,7 @@ object Repository {
         password = row[Officers.password]
     )
 
-    // ── Drivers ───────────────────────────────────────────────────────────────
+    // ── Drivers ──────────────────────────────────────────────────────────────
 
     fun getAllDrivers(): List<Driver> = transaction {
         Drivers.selectAll().map { toDriver(it) }
@@ -41,12 +41,12 @@ object Repository {
     }
 
     fun insertDriver(fullName: String, birthdate: String, address: String, phone: String): Int = transaction {
-        Drivers.insert {
+        Drivers.insertAndGetId {
             it[Drivers.fullName] = fullName
             it[Drivers.birthdate] = birthdate
             it[Drivers.address] = address
             it[Drivers.phone] = phone
-        }[Drivers.id]
+        }.value
     }
 
     fun getOrCreateDriver(fullName: String, birthdate: String, address: String, phone: String): Int {
@@ -62,17 +62,17 @@ object Repository {
         phone = row[Drivers.phone]
     )
 
-    // ── Licenses ──────────────────────────────────────────────────────────────
+    // ── Licenses ─────────────────────────────────────────────────────────────
 
     fun insertLicense(driverId: Int, series: String, number: String, category: String, issueDate: String): Int =
         transaction {
-            Licenses.insert {
+            Licenses.insertAndGetId {
                 it[Licenses.driverId] = driverId
                 it[Licenses.series] = series
                 it[Licenses.number] = number
                 it[Licenses.category] = category
                 it[Licenses.issueDate] = issueDate
-            }[Licenses.id]
+            }.value
         }
 
     fun findLicenseByDriverId(driverId: Int): License? = transaction {
@@ -91,7 +91,7 @@ object Repository {
         issueDate = row[Licenses.issueDate]
     )
 
-    // ── Vehicles ──────────────────────────────────────────────────────────────
+    // ── Vehicles ─────────────────────────────────────────────────────────────
 
     fun getAllVehicles(): List<Vehicle> = transaction {
         Vehicles.selectAll().map { toVehicle(it) }
@@ -138,7 +138,7 @@ object Repository {
         ownerAddress = row[Vehicles.ownerAddress]
     )
 
-    // ── AccidentsRecords ──────────────────────────────────────────────────────
+    // ── AccidentsRecords ─────────────────────────────────────────────────────
 
     fun getAllAccidents(): List<AccidentRecord> = transaction {
         AccidentsRecords.selectAll()
@@ -179,7 +179,7 @@ object Repository {
         createdAt = row[AccidentsRecords.createdAt]
     )
 
-    // ── AccidentParticipants ──────────────────────────────────────────────────
+    // ── AccidentParticipants ────────────────────────────────────────────────
 
     fun insertParticipant(
         accidentId: Int, side: String, driverId: Int, vehicleId: Int,
@@ -202,7 +202,7 @@ object Repository {
         }
     }
 
-    // ── ViolationsTypes ───────────────────────────────────────────────────────
+    // ── ViolationsTypes ─────────────────────────────────────────────────────
 
     fun getAllViolationTypes(): List<ViolationType> = transaction {
         ViolationsTypes.selectAll().map { toViolationType(it) }
@@ -224,7 +224,7 @@ object Repository {
         description = row[ViolationsTypes.description]
     )
 
-    // ── ViolationRecords ──────────────────────────────────────────────────────
+    // ── ViolationRecords ────────────────────────────────────────────────────
 
     fun getAllViolations(): List<ViolationRecord> = transaction {
         ViolationRecords.selectAll()
@@ -270,7 +270,7 @@ object Repository {
         createdAt = row[ViolationRecords.createdAt]
     )
 
-    // ── Stats ─────────────────────────────────────────────────────────────────
+    // ── Stats ───────────────────────────────────────────────────────────────
 
     fun getHomeStats(): HomeStats {
         val today = java.time.LocalDate.now()
