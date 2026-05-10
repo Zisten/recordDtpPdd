@@ -41,12 +41,12 @@ object Repository {
     }
 
     fun insertDriver(fullName: String, birthdate: String, address: String, phone: String): Int = transaction {
-        Drivers.insertAndGetId {
+        Drivers.insert {
             it[Drivers.fullName] = fullName
             it[Drivers.birthdate] = birthdate
             it[Drivers.address] = address
             it[Drivers.phone] = phone
-        }.value
+        }[Drivers.id]
     }
 
     fun getOrCreateDriver(fullName: String, birthdate: String, address: String, phone: String): Int {
@@ -66,13 +66,13 @@ object Repository {
 
     fun insertLicense(driverId: Int, series: String, number: String, category: String, issueDate: String): Int =
         transaction {
-            Licenses.insertAndGetId {
+            Licenses.insert {
                 it[Licenses.driverId] = driverId
                 it[Licenses.series] = series
                 it[Licenses.number] = number
                 it[Licenses.category] = category
                 it[Licenses.issueDate] = issueDate
-            }.value
+            }[Licenses.id]
         }
 
     fun findLicenseByDriverId(driverId: Int): License? = transaction {
@@ -108,7 +108,7 @@ object Repository {
         make: String, model: String, vin: String, numberPlate: String,
         sts: String, ownerName: String, ownerAddress: String
     ): Int = transaction {
-        Vehicles.insertAndGetId {
+        Vehicles.insert {
             it[Vehicles.make] = make
             it[Vehicles.model] = model
             it[Vehicles.vin] = vin
@@ -116,7 +116,7 @@ object Repository {
             it[Vehicles.sts] = sts
             it[Vehicles.ownerName] = ownerName
             it[Vehicles.ownerAddress] = ownerAddress
-        }.value
+        }[Vehicles.id]
     }
 
     fun getOrCreateVehicle(
@@ -151,7 +151,7 @@ object Repository {
         datetime: LocalDateTime, witnessesName: String, witnessesAddress: String,
         description: String, circumstances: String, guiltySide: String, officerId: Int
     ): Int = transaction {
-        AccidentsRecords.insertAndGetId {
+        AccidentsRecords.insert {
             it[AccidentsRecords.locationStreet] = locationStreet
             it[AccidentsRecords.locationBuilding] = locationBuilding
             it[AccidentsRecords.datetime] = datetime
@@ -162,7 +162,7 @@ object Repository {
             it[AccidentsRecords.guiltySide] = guiltySide
             it[AccidentsRecords.officerId] = officerId
             it[AccidentsRecords.createdAt] = LocalDateTime.now()
-        }.value
+        }[AccidentsRecords.id]
     }
 
     private fun toAccident(row: ResultRow) = AccidentRecord(
@@ -179,7 +179,7 @@ object Repository {
         createdAt = row[AccidentsRecords.createdAt]
     )
 
-    // ── AccidentParticipants ────────────────────────────────────────────────
+    // ��─ AccidentParticipants ────────────────────────────────────────────────
 
     fun insertParticipant(
         accidentId: Int, side: String, driverId: Int, vehicleId: Int,
@@ -202,7 +202,7 @@ object Repository {
         }
     }
 
-    // ── ViolationsTypes ─────────────────────────────────────────────────────
+    // ── ViolationsTypes ────────────────────────────────────────���────────────
 
     fun getAllViolationTypes(): List<ViolationType> = transaction {
         ViolationsTypes.selectAll().map { toViolationType(it) }
@@ -213,9 +213,9 @@ object Repository {
             .where { ViolationsTypes.name eq name }
             .map { it[ViolationsTypes.id] }
             .firstOrNull()
-            ?: ViolationsTypes.insertAndGetId {
+            ?: ViolationsTypes.insert {
                 it[ViolationsTypes.name] = name
-            }.value
+            }[ViolationsTypes.id]
     }
 
     private fun toViolationType(row: ResultRow) = ViolationType(
@@ -238,7 +238,7 @@ object Repository {
         witnessAddress: String, witnessPhone: String,
         datetime: LocalDateTime, officerId: Int
     ): Int = transaction {
-        ViolationRecords.insertAndGetId {
+        ViolationRecords.insert {
             it[ViolationRecords.driverId] = driverId
             it[ViolationRecords.vehicleId] = vehicleId
             it[ViolationRecords.licenseId] = licenseId
@@ -251,7 +251,7 @@ object Repository {
             it[ViolationRecords.datetime] = datetime
             it[ViolationRecords.officerId] = officerId
             it[ViolationRecords.createdAt] = LocalDateTime.now()
-        }.value
+        }[ViolationRecords.id]
     }
 
     private fun toViolation(row: ResultRow) = ViolationRecord(
@@ -264,7 +264,7 @@ object Repository {
         description = row[ViolationRecords.description],
         witnessName = row[ViolationRecords.witnessName],
         witnessAddress = row[ViolationRecords.witnessAddress],
-        witnessPhone = row[ViolationRecords.witnessPhone],
+        witnessPhone = row[ViolationalRecords.witnessPhone],
         datetime = row[ViolationRecords.datetime],
         officerId = row[ViolationRecords.officerId],
         createdAt = row[ViolationRecords.createdAt]
