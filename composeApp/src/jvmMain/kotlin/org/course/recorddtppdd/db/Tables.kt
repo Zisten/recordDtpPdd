@@ -1,6 +1,7 @@
 package org.course.recorddtppdd.db
 
 import org.jetbrains.exposed.sql.Table
+import org.jetbrains.exposed.sql.javatime.date
 import org.jetbrains.exposed.sql.javatime.datetime
 
 /**
@@ -23,8 +24,6 @@ object Officers : Table("Officers") {
 object Drivers : Table("Drivers") {
     val id = integer("driver_id").autoIncrement()
 
-    // Для простоты в приложении храним/используем только отображаемое ФИО и телефон,
-    // но в БД поля раздельные.
     val lastName = varchar("last_name", 255)
     val firstName = varchar("first_name", 255)
     val middleName = varchar("middle_name", 255).nullable()
@@ -83,7 +82,13 @@ object AccidentsRecords : Table("AccidentsRecords") {
     val house = varchar("house", 255).nullable()
 
     val witnessesInfo = text("witnesses_info").nullable()
-    val circumstancesJson = json<String>("circumstances_json").nullable()
+
+    /**
+     * В MySQL это JSON. Чтобы не тащить дополнительные мапперы/модули, храним как TEXT.
+     * (В Exposed нет универсального json<T>() без доп. модулей и версий.)
+     */
+    val circumstancesJson = text("circumstances_json").nullable()
+
     val explanation = text("explanation").nullable()
 
     override val primaryKey = PrimaryKey(id)
