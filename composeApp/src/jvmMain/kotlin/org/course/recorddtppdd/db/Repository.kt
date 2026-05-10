@@ -39,13 +39,18 @@ object Repository {
     fun findDriverByNameAndPhone(fullName: String, phone: String?): Driver? = transaction {
         val (ln, fn, mn) = splitFullName(fullName)
 
-        Drivers.selectAll()
-            .where {
-                (Drivers.lastName eq ln) and
-                    (Drivers.firstName eq fn) and
-                    ((Drivers.middleName eq mn) or (Drivers.middleName.isNull() and (mn == null))) and
-                    (Drivers.phone eq phone)
-            }
+        // В Exposed нельзя смешивать kotlin boolean (mn == null) с выражениями SQL через and/or.
+        // Собираем условие по частям.
+        val base = (Drivers.lastName eq ln) and (Drivers.firstName eq fn) and (Drivers.phone eq phone)
+        val middleExpr: Op<Boolean> = if (mn == null) {
+            Drivers.middleName.isNull()
+        } else {
+            Drivers.middleName eq mn
+        }
+
+        Drivers
+            .selectAll()
+            .where { base and middleExpr }
             .map { toDriver(it) }
             .firstOrNull()
     }
@@ -348,7 +353,7 @@ object Repository {
         return HomeStats(accidents, violations)
     }
 
-    // ── Helpers ────────────────��────────────────────────────────────────────
+    // ── Helpers ─────────────────────────────────────────────────────────────
 
     private fun splitFullName(fullName: String): Triple<String, String, String?> {
         val parts = fullName.trim().split(Regex("\\s+"))
