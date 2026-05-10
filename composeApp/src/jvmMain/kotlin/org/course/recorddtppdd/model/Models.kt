@@ -1,5 +1,6 @@
 package org.course.recorddtppdd.model
 
+import java.time.LocalDate
 import java.time.LocalDateTime
 
 data class Officer(
@@ -8,12 +9,17 @@ data class Officer(
     val password: String
 )
 
+/**
+ * Упрощённая модель водителя для UI.
+ * В БД ФИО разнесено на last/first/middle.
+ */
 data class Driver(
     val id: Int,
     val fullName: String,
-    val birthdate: String,
-    val address: String,
-    val phone: String
+    val birthDate: LocalDate?,
+    val registrationAddress: String?,
+    val actualAddress: String?,
+    val phone: String?
 )
 
 data class License(
@@ -21,70 +27,67 @@ data class License(
     val driverId: Int,
     val series: String,
     val number: String,
-    val category: String,
-    val issueDate: String
+    val category: String?,
+    val issueDate: LocalDate
 )
 
+/**
+ * Упрощённая модель ТС для UI.
+ */
 data class Vehicle(
     val id: Int,
-    val make: String,
+    val ownerId: Int?,
+    val brand: String,
     val model: String,
-    val vin: String,
     val numberPlate: String,
-    val sts: String,
-    val ownerName: String,
-    val ownerAddress: String
+    val vin: String?,
+    val regCertificate: String?,
+    val insuranceName: String?,
+    val insurancePolicy: String?,
+    val insuranceExpiry: LocalDate?,
+    val hasHullInsurance: Boolean?
 )
 
 data class AccidentRecord(
     val id: Int,
-    val locationStreet: String,
-    val locationBuilding: String,
-    val datetime: LocalDateTime,
-    val witnessesName: String,
-    val witnessesAddress: String,
-    val description: String,
-    val circumstances: String,
-    val guiltySide: String,
     val officerId: Int,
-    val createdAt: LocalDateTime
+    val typeId: Int?,
+    val dateTime: LocalDateTime,
+    val street: String,
+    val house: String?,
+    val witnessesInfo: String?,
+    val circumstancesJson: String?,
+    val explanation: String?
 )
 
 data class AccidentParticipant(
     val id: Int,
     val accidentId: Int,
-    val side: String,
     val driverId: Int,
     val vehicleId: Int,
-    val damages: String,
-    val notes: String,
-    val licenseId: Int?,
-    val insuranceCompany: String,
-    val insurancePolicy: String,
-    val insuranceExpiry: String,
-    val hasHull: Boolean
-)
-
-data class ViolationRecord(
-    val id: Int,
-    val driverId: Int,
-    val vehicleId: Int?,
-    val licenseId: Int?,
-    val violationTypeId: Int?,
-    val npaPoint: String,
-    val description: String,
-    val witnessName: String,
-    val witnessAddress: String,
-    val witnessPhone: String,
-    val datetime: LocalDateTime,
-    val officerId: Int,
-    val createdAt: LocalDateTime
+    val role: Char,
+    val impactSpot: String?,
+    val damageDetails: String?,
+    val remarks: String?
 )
 
 data class ViolationType(
     val id: Int,
-    val name: String,
-    val description: String
+    val clause: String,
+    val description: String,
+    val fineAmount: Int
+)
+
+data class ViolationRecord(
+    val id: Int,
+    val officerId: Int,
+    val driverId: Int,
+    val vehicleId: Int,
+    val typeId: Int,
+    val dateTime: LocalDateTime,
+    val street: String,
+    val houseNumber: String?,
+    val witnessVictimInfo: String?
 )
 
 /** Сводные данные для главного экрана */

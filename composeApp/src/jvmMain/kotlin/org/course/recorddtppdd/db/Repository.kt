@@ -4,18 +4,20 @@ import org.course.recorddtppdd.model.*
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.transactions.transaction
+import java.time.LocalDate
 import java.time.LocalDateTime
 
 /**
- * Репозиторий — все операции с базой данных через Exposed DSL.
- * Каждый метод оборачивается в transaction { }.
+ * Репозиторий — операции с БД через Exposed DSL.
+ * Привязан к вашей реальной схеме MySQL.
  */
 object Repository {
 
     // ── Officers ─────────────────────────────────────────────────────────────
 
     fun findOfficerByCredentials(login: String, password: String): Officer? = transaction {
-        Officers.selectAll()
+        Officers
+            .selectAll()
             .where { (Officers.login eq login) and (Officers.password eq password) }
             .map { toOfficer(it) }
             .firstOrNull()
@@ -33,47 +35,81 @@ object Repository {
         Drivers.selectAll().map { toDriver(it) }
     }
 
-    fun findDriverByNameAndPhone(name: String, phone: String): Driver? = transaction {
+    /** Очень простой поиск (ФИО + телефон). */
+    fun findDriverByNameAndPhone(fullName: String, phone: String?): Driver? = transaction {
+        val (ln, fn, mn) = splitFullName(fullName)
+
         Drivers.selectAll()
-            .where { (Drivers.fullName eq name) and (Drivers.phone eq phone) }
+            .where {
+                (Drivers.lastName eq ln) and
+                    (Drivers.firstName eq fn) and
+                    ((Drivers.middleName eq mn) or (Drivers.middleName.isNull() and (mn == null))) and
+                    (Drivers.phone eq phone)
+            }
             .map { toDriver(it) }
             .firstOrNull()
     }
 
-    fun insertDriver(fullName: String, birthdate: String, address: String, phone: String): Int = transaction {
+    fun insertDriver(
+        fullName: String,
+        birthDate: LocalDate?,
+        registrationAddress: String?,
+        actualAddress: String?,
+        phone: String?
+    ): Int = transaction {
+        val (ln, fn, mn) = splitFullName(fullName)
+
         Drivers.insert {
-            it[Drivers.fullName] = fullName
-            it[Drivers.birthdate] = birthdate
-            it[Drivers.address] = address
+            it[lastName] = ln
+            it[firstName] = fn
+            it[middleName] = mn
+            it[Drivers.birthDate] = birthDate
+            it[Drivers.registrationAddress] = registrationAddress
+            it[Drivers.actualAddress] = actualAddress
             it[Drivers.phone] = phone
         }[Drivers.id]
     }
 
-    fun getOrCreateDriver(fullName: String, birthdate: String, address: String, phone: String): Int {
+    fun getOrCreateDriver(
+        fullName: String,
+        birthDate: LocalDate?,
+        registrationAddress: String?,
+        actualAddress: String?,
+        phone: String?
+    ): Int {
         return findDriverByNameAndPhone(fullName, phone)?.id
-            ?: insertDriver(fullName, birthdate, address, phone)
+            ?: insertDriver(fullName, birthDate, registrationAddress, actualAddress, phone)
     }
 
-    private fun toDriver(row: ResultRow) = Driver(
-        id = row[Drivers.id],
-        fullName = row[Drivers.fullName],
-        birthdate = row[Drivers.birthdate],
-        address = row[Drivers.address],
-        phone = row[Drivers.phone]
-    )
+    private fun toDriver(row: ResultRow): Driver {
+        val fullName = buildFullName(row[Drivers.lastName], row[Drivers.firstName], row[Drivers.middleName])
+        return Driver(
+            id = row[Drivers.id],
+            fullName = fullName,
+            birthDate = row[Drivers.birthDate],
+            registrationAddress = row[Drivers.registrationAddress],
+            actualAddress = row[Drivers.actualAddress],
+            phone = row[Drivers.phone]
+        )
+    }
 
     // ── Licenses ─────────────────────────────────────────────────────────────
 
-    fun insertLicense(driverId: Int, series: String, number: String, category: String, issueDate: String): Int =
-        transaction {
-            Licenses.insert {
-                it[Licenses.driverId] = driverId
-                it[Licenses.series] = series
-                it[Licenses.number] = number
-                it[Licenses.category] = category
-                it[Licenses.issueDate] = issueDate
-            }[Licenses.id]
-        }
+    fun insertLicense(
+        driverId: Int,
+        series: String,
+        number: String,
+        category: String?,
+        issueDate: LocalDate
+    ): Int = transaction {
+        Licenses.insert {
+            it[Licenses.driverId] = driverId
+            it[Licenses.series] = series
+            it[Licenses.number] = number
+            it[Licenses.category] = category
+            it[Licenses.issueDate] = issueDate
+        }[Licenses.id]
+    }
 
     fun findLicenseByDriverId(driverId: Int): License? = transaction {
         Licenses.selectAll()
@@ -105,177 +141,224 @@ object Repository {
     }
 
     fun insertVehicle(
-        make: String, model: String, vin: String, numberPlate: String,
-        sts: String, ownerName: String, ownerAddress: String
+        ownerId: Int?,
+        brand: String,
+        model: String,
+        numberPlate: String,
+        vin: String?,
+        regCertificate: String?,
+        insuranceName: String?,
+        insurancePolicy: String?,
+        insuranceExpiry: LocalDate?,
+        hasHullInsurance: Boolean?
     ): Int = transaction {
         Vehicles.insert {
-            it[Vehicles.make] = make
+            it[Vehicles.ownerId] = ownerId
+            it[Vehicles.brand] = brand
             it[Vehicles.model] = model
-            it[Vehicles.vin] = vin
             it[Vehicles.numberPlate] = numberPlate
-            it[Vehicles.sts] = sts
-            it[Vehicles.ownerName] = ownerName
-            it[Vehicles.ownerAddress] = ownerAddress
+            it[Vehicles.vin] = vin
+            it[Vehicles.regCertificate] = regCertificate
+            it[Vehicles.insuranceName] = insuranceName
+            it[Vehicles.insurancePolicy] = insurancePolicy
+            it[Vehicles.insuranceExpiry] = insuranceExpiry
+            it[Vehicles.hasHullInsurance] = hasHullInsurance
         }[Vehicles.id]
     }
 
     fun getOrCreateVehicle(
-        make: String, model: String, vin: String, numberPlate: String,
-        sts: String, ownerName: String, ownerAddress: String
+        ownerId: Int?,
+        brand: String,
+        model: String,
+        numberPlate: String,
+        vin: String?,
+        regCertificate: String?,
+        insuranceName: String?,
+        insurancePolicy: String?,
+        insuranceExpiry: LocalDate?,
+        hasHullInsurance: Boolean?
     ): Int {
         return findVehicleByPlate(numberPlate)?.id
-            ?: insertVehicle(make, model, vin, numberPlate, sts, ownerName, ownerAddress)
+            ?: insertVehicle(
+                ownerId = ownerId,
+                brand = brand,
+                model = model,
+                numberPlate = numberPlate,
+                vin = vin,
+                regCertificate = regCertificate,
+                insuranceName = insuranceName,
+                insurancePolicy = insurancePolicy,
+                insuranceExpiry = insuranceExpiry,
+                hasHullInsurance = hasHullInsurance
+            )
     }
 
     private fun toVehicle(row: ResultRow) = Vehicle(
         id = row[Vehicles.id],
-        make = row[Vehicles.make],
+        ownerId = row[Vehicles.ownerId],
+        brand = row[Vehicles.brand],
         model = row[Vehicles.model],
-        vin = row[Vehicles.vin],
         numberPlate = row[Vehicles.numberPlate],
-        sts = row[Vehicles.sts],
-        ownerName = row[Vehicles.ownerName],
-        ownerAddress = row[Vehicles.ownerAddress]
+        vin = row[Vehicles.vin],
+        regCertificate = row[Vehicles.regCertificate],
+        insuranceName = row[Vehicles.insuranceName],
+        insurancePolicy = row[Vehicles.insurancePolicy],
+        insuranceExpiry = row[Vehicles.insuranceExpiry],
+        hasHullInsurance = row[Vehicles.hasHullInsurance]
     )
 
     // ── AccidentsRecords ─────────────────────────────────────────────────────
 
     fun getAllAccidents(): List<AccidentRecord> = transaction {
         AccidentsRecords.selectAll()
-            .orderBy(AccidentsRecords.datetime, SortOrder.DESC)
+            .orderBy(AccidentsRecords.dateTime, SortOrder.DESC)
             .map { toAccident(it) }
     }
 
     fun insertAccident(
-        locationStreet: String, locationBuilding: String,
-        datetime: LocalDateTime, witnessesName: String, witnessesAddress: String,
-        description: String, circumstances: String, guiltySide: String, officerId: Int
+        officerId: Int,
+        typeId: Int?,
+        dateTime: LocalDateTime,
+        street: String,
+        house: String?,
+        witnessesInfo: String?,
+        circumstancesJson: String?,
+        explanation: String?
     ): Int = transaction {
         AccidentsRecords.insert {
-            it[AccidentsRecords.locationStreet] = locationStreet
-            it[AccidentsRecords.locationBuilding] = locationBuilding
-            it[AccidentsRecords.datetime] = datetime
-            it[AccidentsRecords.witnessesName] = witnessesName
-            it[AccidentsRecords.witnessesAddress] = witnessesAddress
-            it[AccidentsRecords.description] = description
-            it[AccidentsRecords.circumstances] = circumstances
-            it[AccidentsRecords.guiltySide] = guiltySide
             it[AccidentsRecords.officerId] = officerId
-            it[AccidentsRecords.createdAt] = LocalDateTime.now()
+            it[AccidentsRecords.typeId] = typeId
+            it[AccidentsRecords.dateTime] = dateTime
+            it[AccidentsRecords.street] = street
+            it[AccidentsRecords.house] = house
+            it[AccidentsRecords.witnessesInfo] = witnessesInfo
+            it[AccidentsRecords.circumstancesJson] = circumstancesJson
+            it[AccidentsRecords.explanation] = explanation
         }[AccidentsRecords.id]
     }
 
     private fun toAccident(row: ResultRow) = AccidentRecord(
         id = row[AccidentsRecords.id],
-        locationStreet = row[AccidentsRecords.locationStreet],
-        locationBuilding = row[AccidentsRecords.locationBuilding],
-        datetime = row[AccidentsRecords.datetime],
-        witnessesName = row[AccidentsRecords.witnessesName],
-        witnessesAddress = row[AccidentsRecords.witnessesAddress],
-        description = row[AccidentsRecords.description],
-        circumstances = row[AccidentsRecords.circumstances],
-        guiltySide = row[AccidentsRecords.guiltySide],
         officerId = row[AccidentsRecords.officerId],
-        createdAt = row[AccidentsRecords.createdAt]
+        typeId = row[AccidentsRecords.typeId],
+        dateTime = row[AccidentsRecords.dateTime],
+        street = row[AccidentsRecords.street],
+        house = row[AccidentsRecords.house],
+        witnessesInfo = row[AccidentsRecords.witnessesInfo],
+        circumstancesJson = row[AccidentsRecords.circumstancesJson],
+        explanation = row[AccidentsRecords.explanation]
     )
 
-    // ��─ AccidentParticipants ────────────────────────────────────────────────
+    // ── AccidentParticipants ────────────────────────────────────────────────
 
     fun insertParticipant(
-        accidentId: Int, side: String, driverId: Int, vehicleId: Int,
-        damages: String, notes: String, licenseId: Int?,
-        insuranceCompany: String, insurancePolicy: String,
-        insuranceExpiry: String, hasHull: Boolean
+        accidentId: Int,
+        driverId: Int,
+        vehicleId: Int,
+        role: Char,
+        impactSpot: String?,
+        damageDetails: String?,
+        remarks: String?
     ) = transaction {
         AccidentParticipants.insert {
             it[AccidentParticipants.accidentId] = accidentId
-            it[AccidentParticipants.side] = side
             it[AccidentParticipants.driverId] = driverId
             it[AccidentParticipants.vehicleId] = vehicleId
-            it[AccidentParticipants.damages] = damages
-            it[AccidentParticipants.notes] = notes
-            it[AccidentParticipants.licenseId] = licenseId
-            it[AccidentParticipants.insuranceCompany] = insuranceCompany
-            it[AccidentParticipants.insurancePolicy] = insurancePolicy
-            it[AccidentParticipants.insuranceExpiry] = insuranceExpiry
-            it[AccidentParticipants.hasHull] = hasHull
+            it[AccidentParticipants.role] = role
+            it[AccidentParticipants.impactSpot] = impactSpot
+            it[AccidentParticipants.damageDetails] = damageDetails
+            it[AccidentParticipants.remarks] = remarks
         }
     }
 
-    // ── ViolationsTypes ────────────────────────────────────────���────────────
+    // ── ViolationsTypes ─────────────────────────────────────────────────────
 
     fun getAllViolationTypes(): List<ViolationType> = transaction {
         ViolationsTypes.selectAll().map { toViolationType(it) }
     }
 
-    fun getOrCreateViolationType(name: String): Int = transaction {
-        ViolationsTypes.selectAll()
-            .where { ViolationsTypes.name eq name }
+    fun getOrCreateViolationType(clause: String, description: String, fineAmount: Int): Int = transaction {
+        ViolationsTypes
+            .selectAll()
+            .where { ViolationsTypes.clause eq clause }
             .map { it[ViolationsTypes.id] }
             .firstOrNull()
             ?: ViolationsTypes.insert {
-                it[ViolationsTypes.name] = name
+                it[ViolationsTypes.clause] = clause
+                it[ViolationsTypes.description] = description
+                it[ViolationsTypes.fineAmount] = fineAmount
             }[ViolationsTypes.id]
     }
 
     private fun toViolationType(row: ResultRow) = ViolationType(
         id = row[ViolationsTypes.id],
-        name = row[ViolationsTypes.name],
-        description = row[ViolationsTypes.description]
+        clause = row[ViolationsTypes.clause],
+        description = row[ViolationsTypes.description],
+        fineAmount = row[ViolationsTypes.fineAmount]
     )
 
     // ── ViolationRecords ────────────────────────────────────────────────────
 
     fun getAllViolations(): List<ViolationRecord> = transaction {
         ViolationRecords.selectAll()
-            .orderBy(ViolationRecords.datetime, SortOrder.DESC)
+            .orderBy(ViolationRecords.dateTime, SortOrder.DESC)
             .map { toViolation(it) }
     }
 
     fun insertViolation(
-        driverId: Int, vehicleId: Int?, licenseId: Int?, violationTypeId: Int?,
-        npaPoint: String, description: String, witnessName: String,
-        witnessAddress: String, witnessPhone: String,
-        datetime: LocalDateTime, officerId: Int
+        officerId: Int,
+        driverId: Int,
+        vehicleId: Int,
+        typeId: Int,
+        dateTime: LocalDateTime,
+        street: String,
+        houseNumber: String?,
+        witnessVictimInfo: String?
     ): Int = transaction {
         ViolationRecords.insert {
+            it[ViolationRecords.officerId] = officerId
             it[ViolationRecords.driverId] = driverId
             it[ViolationRecords.vehicleId] = vehicleId
-            it[ViolationRecords.licenseId] = licenseId
-            it[ViolationRecords.violationTypeId] = violationTypeId
-            it[ViolationRecords.npaPoint] = npaPoint
-            it[ViolationRecords.description] = description
-            it[ViolationRecords.witnessName] = witnessName
-            it[ViolationRecords.witnessAddress] = witnessAddress
-            it[ViolationRecords.witnessPhone] = witnessPhone
-            it[ViolationRecords.datetime] = datetime
-            it[ViolationRecords.officerId] = officerId
-            it[ViolationRecords.createdAt] = LocalDateTime.now()
+            it[ViolationRecords.typeId] = typeId
+            it[ViolationRecords.dateTime] = dateTime
+            it[ViolationRecords.street] = street
+            it[ViolationRecords.houseNumber] = houseNumber
+            it[ViolationRecords.witnessVictimInfo] = witnessVictimInfo
         }[ViolationRecords.id]
     }
 
     private fun toViolation(row: ResultRow) = ViolationRecord(
         id = row[ViolationRecords.id],
+        officerId = row[ViolationRecords.officerId],
         driverId = row[ViolationRecords.driverId],
         vehicleId = row[ViolationRecords.vehicleId],
-        licenseId = row[ViolationRecords.licenseId],
-        violationTypeId = row[ViolationRecords.violationTypeId],
-        npaPoint = row[ViolationRecords.npaPoint],
-        description = row[ViolationRecords.description],
-        witnessName = row[ViolationRecords.witnessName],
-        witnessAddress = row[ViolationRecords.witnessAddress],
-        witnessPhone = row[ViolationalRecords.witnessPhone],
-        datetime = row[ViolationRecords.datetime],
-        officerId = row[ViolationRecords.officerId],
-        createdAt = row[ViolationRecords.createdAt]
+        typeId = row[ViolationRecords.typeId],
+        dateTime = row[ViolationRecords.dateTime],
+        street = row[ViolationRecords.street],
+        houseNumber = row[ViolationRecords.houseNumber],
+        witnessVictimInfo = row[ViolationRecords.witnessVictimInfo]
     )
 
     // ── Stats ───────────────────────────────────────────────────────────────
 
     fun getHomeStats(): HomeStats {
         val today = java.time.LocalDate.now()
-        val accidents = getAllAccidents().count { it.datetime.toLocalDate() == today }
-        val violations = getAllViolations().count { it.datetime.toLocalDate() == today }
+        val accidents = getAllAccidents().count { it.dateTime.toLocalDate() == today }
+        val violations = getAllViolations().count { it.dateTime.toLocalDate() == today }
         return HomeStats(accidents, violations)
+    }
+
+    // ── Helpers ────────────────��────────────────────────────────────────────
+
+    private fun splitFullName(fullName: String): Triple<String, String, String?> {
+        val parts = fullName.trim().split(Regex("\\s+"))
+        val ln = parts.getOrElse(0) { "" }
+        val fn = parts.getOrElse(1) { "" }
+        val mn = parts.getOrNull(2)
+        return Triple(ln, fn, mn)
+    }
+
+    private fun buildFullName(last: String, first: String, middle: String?): String {
+        return listOfNotNull(last, first, middle?.takeIf { it.isNotBlank() }).joinToString(" ")
     }
 }
