@@ -39,11 +39,11 @@ object Repository {
     fun findDriverByNameAndPhone(fullName: String, phone: String?): Driver? = transaction {
         val (ln, fn, mn) = splitFullName(fullName)
 
-        // В Exposed нельзя смешивать kotlin boolean (mn == null) с выражениями SQL через and/or.
-        // Собираем условие по частям.
         val base = (Drivers.lastName eq ln) and (Drivers.firstName eq fn) and (Drivers.phone eq phone)
+
+        // В некоторых версиях Exposed нет extension isNull(), поэтому используем eq null.
         val middleExpr: Op<Boolean> = if (mn == null) {
-            Drivers.middleName.isNull()
+            Drivers.middleName eq null
         } else {
             Drivers.middleName eq mn
         }
