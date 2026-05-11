@@ -66,6 +66,33 @@ CREATE TABLE IF NOT EXISTS AccidentsRecords (
     FOREIGN KEY (officer_id) REFERENCES Officers(id)
 ) ENGINE=InnoDB;
 
+CREATE TABLE IF NOT EXISTS AccidentTypes (
+    type_id     INT AUTO_INCREMENT PRIMARY KEY,
+    name        VARCHAR(500) NOT NULL,
+    description TEXT
+) ENGINE=InnoDB;
+
+INSERT IGNORE INTO AccidentTypes (type_id, name, description) VALUES
+    (1, 'ТС находился на стоянке, парковке, обочине и т.п в неподвижном состоянии', NULL),
+    (2, 'Заезжал на стоянку, парковку, во двор, на второстепенную дорогу', NULL),
+    (3, 'Двигался прямо (не маневрировал)', NULL),
+    (4, 'Двигался на перекрёстке', NULL),
+    (5, 'Заезжал на перекресток с круговым движением', NULL),
+    (6, 'Столкнулся с ТС, двигавшимся в том же направлении по той же полосе', NULL),
+    (7, 'Столкнулся с ТС, двигавшимся в том же направлении по другой полосе (в другом ряду)', NULL),
+    (8, 'Менял полосу (перестраивался в другой ряд)', NULL),
+    (9, 'Обгонял', NULL),
+    (10, 'Поворачивал направо', NULL),
+    (11, 'Поворачивал налево', NULL),
+    (12, 'Совершал разворот', NULL),
+    (13, 'Двигался задним ходом', NULL),
+    (14, 'Выехал на сторону дороги, предназначенную для встречного движения', NULL),
+    (15, 'Второе ТС находилось слева от меня', NULL),
+    (16, 'Не выполнил требование знака приоритета', NULL),
+    (17, 'Совершил наезд (на неподвижное ТС, препятствие, пешехода и т.п.)', NULL),
+    (18, 'Остановился (стоял) на запрещающий сигнал светофора', NULL),
+    (19, 'Иное', NULL);
+
 CREATE TABLE IF NOT EXISTS AccidentParticipants (
     id                INT AUTO_INCREMENT PRIMARY KEY,
     accident_id       INT         NOT NULL,

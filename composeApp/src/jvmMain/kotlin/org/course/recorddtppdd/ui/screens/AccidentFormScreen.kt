@@ -20,6 +20,10 @@ fun AccidentFormScreen(
     officerId: Int,
     onDone: () -> Unit
 ) {
+    LaunchedEffect(Unit) {
+        vm.loadAccidentTypes()
+    }
+
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
         Text(
             "Оформление ДТП",
@@ -37,12 +41,11 @@ fun AccidentFormScreen(
         Box(modifier = Modifier.weight(1f)) {
             when (vm.currentStep) {
                 0 -> Step1GeneralInfo(vm)
-                1 -> Step2SelectSide(vm)
-                2 -> Step3VehicleData(vm)
-                3 -> Step4DriverData(vm)
-                4 -> Step5Damages(vm)
-                5 -> Step6Circumstances(vm)
-                6 -> Step7Completion(vm)
+                1 -> Step2VehicleData(vm)
+                2 -> Step3DriverData(vm)
+                3 -> Step4Damages(vm)
+                4 -> Step5Circumstances(vm)
+                5 -> Step6Completion(vm)
             }
         }
 
@@ -85,7 +88,7 @@ fun AccidentFormScreen(
 @Composable
 private fun StepIndicator(current: Int, total: Int) {
     val stepNames = listOf(
-        "Общее", "ТС", "Данные ТС", "Водитель", "Повреждения", "Обстоятельства", "Завершение"
+        "Общее", "Данные ТС", "Водитель", "Повреждения", "Обстоятельства", "Завершение"
     )
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -132,53 +135,10 @@ private fun Step1GeneralInfo(vm: AccidentFormViewModel) {
     }
 }
 
-// ── Шаг 2: Выбор стороны ────────────────────────────────────────────────────
+// ── Шаг 2: Данные ТС ────────────────────────────────────────────────────────
 
 @Composable
-private fun Step2SelectSide(vm: AccidentFormViewModel) {
-    Column(
-        modifier = Modifier.fillMaxSize(),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Text(
-            "Выберите, данные какого участника заполнять первым:",
-            fontSize = 16.sp,
-            fontWeight = FontWeight.Medium
-        )
-        Spacer(Modifier.height(24.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
-            listOf("A", "B").forEach { side ->
-                ElevatedButton(
-                    onClick = { vm.currentSide = side },
-                    colors = if (vm.currentSide == side)
-                        ButtonDefaults.elevatedButtonColors(
-                            containerColor = MaterialTheme.colorScheme.primaryContainer
-                        )
-                    else ButtonDefaults.elevatedButtonColors()
-                ) {
-                    Text("Участник $side", fontSize = 18.sp, modifier = Modifier.padding(16.dp))
-                }
-            }
-        }
-        Spacer(Modifier.height(16.dp))
-        Text(
-            "Текущий участник для заполнения: ${vm.currentSide}",
-            color = MaterialTheme.colorScheme.primary
-        )
-        Spacer(Modifier.height(8.dp))
-        Text(
-            "На следующих шагах будут заполнены данные ТС и водителей для обоих участников.",
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            fontSize = 13.sp
-        )
-    }
-}
-
-// ── Шаг 3: Данные ТС ────────────────────────────────────────────────────────
-
-@Composable
-private fun Step3VehicleData(vm: AccidentFormViewModel) {
+private fun Step2VehicleData(vm: AccidentFormViewModel) {
     val scroll = rememberScrollState()
     Column(modifier = Modifier.fillMaxSize().verticalScroll(scroll), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         SectionTitle("ТС участника A")
@@ -200,10 +160,10 @@ private fun VehicleFields(data: VehicleFormData, onUpdate: (VehicleFormData) -> 
     FormField("Адрес собственника", data.ownerAddress) { onUpdate(data.copy(ownerAddress = it)) }
 }
 
-// ── Шаг 4: Данные водителей ─────────────────────────────────────────────────
+// ── Шаг 3: Данные водителей ─────────────────────────────────────────────────
 
 @Composable
-private fun Step4DriverData(vm: AccidentFormViewModel) {
+private fun Step3DriverData(vm: AccidentFormViewModel) {
     val scroll = rememberScrollState()
     Column(modifier = Modifier.fillMaxSize().verticalScroll(scroll), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         SectionTitle("Водитель A")
@@ -248,10 +208,10 @@ private fun DriverFields(data: DriverFormData, onUpdate: (DriverFormData) -> Uni
     }
 }
 
-// ── Шаг 5: Повреждения ──────────────────────────────────────────────────────
+// ── Шаг 4: Повреждения ──────────────────────────────────────────────────────
 
 @Composable
-private fun Step5Damages(vm: AccidentFormViewModel) {
+private fun Step4Damages(vm: AccidentFormViewModel) {
     val scroll = rememberScrollState()
     Column(modifier = Modifier.fillMaxSize().verticalScroll(scroll), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         SectionTitle("Повреждения ТС A")
@@ -280,11 +240,12 @@ private fun Step5Damages(vm: AccidentFormViewModel) {
     }
 }
 
-// ── Шаг 6: Обстоятельства ───────────────────────────────────────────────────
+// ── Шаг 5: Обстоятельства ───────────────────────────────────────────────────
 
 @Composable
-private fun Step6Circumstances(vm: AccidentFormViewModel) {
+private fun Step5Circumstances(vm: AccidentFormViewModel) {
     val scroll = rememberScrollState()
+    val circumstanceItems = vm.accidentTypes.map { it.name }.ifEmpty { ACCIDENT_CIRCUMSTANCES }
     Column(modifier = Modifier.fillMaxSize().verticalScroll(scroll), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         SectionTitle("Обстоятельства ДТП")
         Text(
@@ -293,7 +254,7 @@ private fun Step6Circumstances(vm: AccidentFormViewModel) {
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
         Spacer(Modifier.height(4.dp))
-        ACCIDENT_CIRCUMSTANCES.forEach { item ->
+        circumstanceItems.forEach { item ->
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.fillMaxWidth()
@@ -308,10 +269,10 @@ private fun Step6Circumstances(vm: AccidentFormViewModel) {
     }
 }
 
-// ── Шаг 7: Завершение ───────────────────────────────────────────────────────
+// ── Шаг 6: Завершение ───────────────────────────────────────────────────────
 
 @Composable
-private fun Step7Completion(vm: AccidentFormViewModel) {
+private fun Step6Completion(vm: AccidentFormViewModel) {
     val scroll = rememberScrollState()
     Column(modifier = Modifier.fillMaxSize().verticalScroll(scroll), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         SectionTitle("Завершение оформления")
