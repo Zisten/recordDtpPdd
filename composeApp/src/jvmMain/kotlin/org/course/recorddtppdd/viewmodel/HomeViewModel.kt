@@ -6,14 +6,12 @@ import androidx.compose.runtime.setValue
 import org.course.recorddtppdd.db.Repository
 import org.course.recorddtppdd.model.AccidentRecord
 import org.course.recorddtppdd.model.HomeStats
-import org.course.recorddtppdd.model.SqlReportQuery
 import org.course.recorddtppdd.model.ViolationRecord
 
 class HomeViewModel {
     var stats by mutableStateOf(HomeStats(0, 0))
     var accidents by mutableStateOf<List<AccidentRecord>>(emptyList())
     var violations by mutableStateOf<List<ViolationRecord>>(emptyList())
-    var sqlReports by mutableStateOf<List<SqlReportQuery>>(emptyList())
     var isLoading by mutableStateOf(false)
     var error by mutableStateOf("")
 
@@ -32,7 +30,6 @@ class HomeViewModel {
             stats = Repository.getHomeStats()
             accidents = Repository.getAllAccidents()
             violations = Repository.getAllViolations()
-            sqlReports = Repository.getSqlReportQueries()
         } catch (e: Exception) {
             error = "Ошибка загрузки данных: ${e.message}"
         } finally {

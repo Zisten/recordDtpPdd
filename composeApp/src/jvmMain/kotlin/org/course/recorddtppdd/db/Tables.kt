@@ -94,15 +94,6 @@ object AccidentsRecords : Table("AccidentsRecords") {
     override val primaryKey = PrimaryKey(id)
 }
 
-/** AccidentTypes(type_id, name, description) */
-object AccidentTypes : Table("AccidentTypes") {
-    val id = integer("type_id").autoIncrement()
-    val name = varchar("name", 500)
-    val description = text("description").nullable()
-
-    override val primaryKey = PrimaryKey(id)
-}
-
 /** AccidentParticipants(participant_id, accident_id, driver_id, vehicle_id, role, impact_spot, damage_details, remarks) */
 object AccidentParticipants : Table("AccidentParticipants") {
     val id = integer("participant_id").autoIncrement()

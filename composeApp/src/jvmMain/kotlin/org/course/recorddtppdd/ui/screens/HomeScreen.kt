@@ -24,7 +24,7 @@ private val dtFmt = DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm")
 @Composable
 fun HomeScreen(vm: HomeViewModel) {
     var selectedTab by remember { mutableStateOf(0) }
-    val tabs = listOf("ДТП", "Нарушения ПДД", "SQL-отчёты")
+    val tabs = listOf("ДТП", "Нарушения ПДД")
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
 
@@ -77,7 +77,6 @@ fun HomeScreen(vm: HomeViewModel) {
         when (selectedTab) {
             0 -> AccidentsTable(vm)
             1 -> ViolationsTable(vm)
-            2 -> SqlReportsTable(vm)
         }
     }
 }
@@ -169,35 +168,6 @@ private fun ViolationsTable(vm: HomeViewModel) {
                 )
             }
         )
-    }
-}
-
-@Composable
-private fun SqlReportsTable(vm: HomeViewModel) {
-    val scroll = rememberScrollState()
-    Column(
-        modifier = Modifier.fillMaxWidth().verticalScroll(scroll),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
-    ) {
-        if (vm.sqlReports.isEmpty()) {
-            Text("Нет данных SQL-отчётов", color = MaterialTheme.colorScheme.onSurfaceVariant)
-            return
-        }
-        vm.sqlReports.forEach { report ->
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text(report.title, fontWeight = FontWeight.SemiBold)
-                    Text(
-                        report.sql,
-                        fontSize = 11.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    report.rows.forEach { row ->
-                        Text(row, fontSize = 12.sp)
-                    }
-                }
-            }
-        }
     }
 }
 

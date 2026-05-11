@@ -72,12 +72,6 @@ data class AccidentParticipant(
     val remarks: String?
 )
 
-data class AccidentType(
-    val id: Int,
-    val name: String,
-    val description: String?
-)
-
 data class ViolationType(
     val id: Int,
     val clause: String,
@@ -103,10 +97,4 @@ data class ViolationRecord(
 data class HomeStats(
     val accidentsToday: Int,
     val violationsToday: Int
-)
-
-data class SqlReportQuery(
-    val title: String,
-    val sql: String,
-    val rows: List<String>
 )

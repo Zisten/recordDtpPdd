@@ -5,7 +5,6 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import org.course.recorddtppdd.db.Repository
-import org.course.recorddtppdd.model.AccidentType
 import java.time.LocalDate
 
 /** Данные транспортного средства (для каждого участника) */
@@ -37,9 +36,27 @@ data class DriverFormData(
     var hasHull: Boolean = false
 )
 
+val ACCIDENT_CIRCUMSTANCES = listOf(
+    "Превышение скорости",
+    "Проезд на запрещающий сигнал светофора",
+    "Несоблюдение дистанции",
+    "Нарушение правил обгона",
+    "Нарушение правил поворота/разворота",
+    "Нарушение правил проезда перекрёстка",
+    "Выезд на встречную полосу движения",
+    "Нарушение правил остановки/стоянки",
+    "Управление ТС в состоянии опьянения",
+    "Неисправность транспортного средства",
+    "Неудовлетворительное состояние дороги",
+    "Плохая видимость (туман, снегопад)",
+    "Нарушение правил проезда ж/д переезда",
+    "Нарушение правил перестроения",
+    "Иное"
+)
+
 class AccidentFormViewModel {
     var currentStep by mutableStateOf(0)
-    val totalSteps = 6
+    val totalSteps = 7
 
     // Шаг 1: Общая информация
     var locationStreet by mutableStateOf("")
@@ -50,60 +67,38 @@ class AccidentFormViewModel {
     var witnessesAddress by mutableStateOf("")
     var noWitnesses by mutableStateOf(false)
 
-    // Шаг 2 & 3: Данные ТС и водителей
+    // Шаг 2: Выбор ТС (A или B — какое заполняем первым)
+    var currentSide by mutableStateOf("A")  // редактируемая сторона в шаге 3/4/5
+
+    // Шаг 3 & 4: Данные ТС и водителей
     var vehicleA by mutableStateOf(VehicleFormData())
     var vehicleB by mutableStateOf(VehicleFormData())
     var driverA by mutableStateOf(DriverFormData())
     var driverB by mutableStateOf(DriverFormData())
 
-    // Шаг 4: Повреждения
+    // Шаг 5: Повреждения
     var damagesA by mutableStateOf("")
     var notesA by mutableStateOf("")
     var damagesB by mutableStateOf("")
     var notesB by mutableStateOf("")
 
-    // Шаг 5: Обстоятельства
+    // Шаг 6: Обстоятельства
     val selectedCircumstances = mutableStateListOf<String>()
 
-    // Шаг 6: Завершение
+    // Шаг 7: Завершение
     var accidentDescription by mutableStateOf("")
     var guiltySide by mutableStateOf("не определён")
 
     var isSaving by mutableStateOf(false)
     var saveError by mutableStateOf("")
     var saveSuccess by mutableStateOf(false)
-    val accidentTypes = mutableStateListOf<AccidentType>()
 
-    init {
-        loadAccidentTypes()
-    }
-
-    fun nextStep(): Boolean {
-        val validationError = validateStep(currentStep)
-        if (validationError != null) {
-            saveError = validationError
-            return false
-        }
-        saveError = ""
-        if (currentStep < totalSteps - 1) currentStep++
-        return true
-    }
+    fun nextStep() { if (currentStep < totalSteps - 1) currentStep++ }
     fun prevStep() { if (currentStep > 0) currentStep-- }
 
-    fun selectCircumstance(item: String) {
-        selectedCircumstances.clear()
-        selectedCircumstances.add(item)
-    }
-
-    fun loadAccidentTypes() {
-        accidentTypes.clear()
-        try {
-            val dbTypes = Repository.getAllAccidentTypes()
-            accidentTypes.addAll(dbTypes)
-        } catch (_: Exception) {
-            // Справочник недоступен (например, проблема подключения) — оставляем список пустым,
-            // UI покажет явное сообщение и не даст выбрать обстоятельство.
-        }
+    fun toggleCircumstance(item: String) {
+        if (selectedCircumstances.contains(item)) selectedCircumstances.remove(item)
+        else selectedCircumstances.add(item)
     }
 
     /** Сохраняет запись ДТП в БД */
@@ -111,11 +106,6 @@ class AccidentFormViewModel {
         isSaving = true
         saveError = ""
         try {
-            val finalValidationError = validateAllRequiredFields()
-            if (finalValidationError != null) {
-                saveError = finalValidationError
-                return
-            }
             val dt = java.time.LocalDateTime.parse(
                 "${accidentDate}T${accidentTime.padStart(5, '0')}:00"
             )
@@ -133,18 +123,9 @@ class AccidentFormViewModel {
                 }
             }.ifBlank { null }
 
-            val selectedCircumstance = selectedCircumstances.firstOrNull()
-            val accidentTypeId = selectedCircumstance?.let { selectedName ->
-                accidentTypes.firstOrNull { type -> type.name == selectedName }?.id
-            }
-            if (accidentTypeId == null) {
-                saveError = "Не удалось сохранить ДТП: выбранное обстоятельство не найдено в справочнике"
-                return
-            }
-
             val accidentId = Repository.insertAccident(
                 officerId = officerId,
-                typeId = accidentTypeId,
+                typeId = null,
                 dateTime = dt,
                 street = locationStreet,
                 house = locationBuilding.ifBlank { null },
@@ -253,6 +234,7 @@ class AccidentFormViewModel {
         witnessesName = ""
         witnessesAddress = ""
         noWitnesses = false
+        currentSide = "A"
         vehicleA = VehicleFormData()
         vehicleB = VehicleFormData()
         driverA = DriverFormData()
@@ -266,49 +248,7 @@ class AccidentFormViewModel {
         guiltySide = "не определён"
         saveError = ""
         saveSuccess = false
-        loadAccidentTypes()
     }
-
-    private fun validateStep(step: Int): String? = when (step) {
-        0 -> when {
-            locationStreet.isBlank() -> "Заполните обязательное поле: улица"
-            accidentDate.isBlank() -> "Заполните обязательное поле: дата ДТП"
-            accidentTime.isBlank() -> "Заполните обязательное поле: время ДТП"
-            else -> null
-        }
-        1 -> {
-            val missing = mutableListOf<String>()
-            if (vehicleA.make.isBlank()) missing += "марка ТС A"
-            if (vehicleA.model.isBlank()) missing += "модель ТС A"
-            if (vehicleA.numberPlate.isBlank()) missing += "госномер ТС A"
-            if (vehicleB.make.isBlank()) missing += "марка ТС B"
-            if (vehicleB.model.isBlank()) missing += "модель ТС B"
-            if (vehicleB.numberPlate.isBlank()) missing += "госномер ТС B"
-            missing.takeIf { it.isNotEmpty() }?.let {
-                "Заполните обязательные поля: ${it.joinToString(", ")}"
-            }
-        }
-        2 -> {
-            val missing = mutableListOf<String>()
-            if (!isValidFullName(driverA.fullName)) missing += "ФИО водителя A (минимум фамилия и имя)"
-            if (!isValidFullName(driverB.fullName)) missing += "ФИО водителя B (минимум фамилия и имя)"
-            missing.takeIf { it.isNotEmpty() }?.let {
-                "Заполните обязательные поля: ${it.joinToString(", ")}"
-            }
-        }
-        4 -> if (selectedCircumstances.isEmpty()) {
-            "Выберите хотя бы одно обстоятельство ДТП"
-        } else null
-        else -> null
-    }
-
-    private fun validateAllRequiredFields(): String? {
-        val validationSteps = listOf(0, 1, 2, 4)
-        return validationSteps.firstNotNullOfOrNull { step -> validateStep(step) }
-    }
-
-    private fun isValidFullName(value: String): Boolean =
-        value.trim().split(Regex("\\s+")).size >= 2
 }
 
 /** Кодирует список строк в JSON-массив */
