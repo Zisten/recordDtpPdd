@@ -5,10 +5,6 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 
-/**
- * Светлая цветовая схема Material3 (адаптирована для Compose Desktop).
- * Убраны зависимости на android.os.Build, LocalContext и dynamic color.
- */
 private val LightColorScheme = lightColorScheme(
     primary = primaryLight,
     onPrimary = onPrimaryLight,
