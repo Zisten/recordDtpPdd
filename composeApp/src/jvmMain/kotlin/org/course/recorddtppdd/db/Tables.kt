@@ -75,7 +75,7 @@ object AccidentsRecords : Table("AccidentsRecords") {
     val id = integer("accident_id").autoIncrement()
 
     val officerId = integer("officer_id").references(Officers.id)
-    val typeId = integer("type_id").nullable() // справочник типов ДТП, сейчас в приложении можно не использовать
+    val typeId = integer("type_id").references(AccidentTypes.id).nullable()
 
     val dateTime = datetime("date_time")
     val street = varchar("street", 255)
@@ -90,6 +90,15 @@ object AccidentsRecords : Table("AccidentsRecords") {
     val circumstancesJson = text("circumstances_json").nullable()
 
     val explanation = text("explanation").nullable()
+
+    override val primaryKey = PrimaryKey(id)
+}
+
+/** AccidentTypes(type_id, name, description) */
+object AccidentTypes : Table("AccidentTypes") {
+    val id = integer("type_id").autoIncrement()
+    val name = varchar("name", 255)
+    val description = text("description").nullable()
 
     override val primaryKey = PrimaryKey(id)
 }

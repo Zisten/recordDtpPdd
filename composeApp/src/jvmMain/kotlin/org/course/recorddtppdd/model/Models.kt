@@ -72,6 +72,12 @@ data class AccidentParticipant(
     val remarks: String?
 )
 
+data class AccidentType(
+    val id: Int,
+    val name: String,
+    val description: String?
+)
+
 data class ViolationType(
     val id: Int,
     val clause: String,
@@ -97,4 +103,11 @@ data class ViolationRecord(
 data class HomeStats(
     val accidentsToday: Int,
     val violationsToday: Int
+)
+
+data class AnalyticsRow(
+    val category: String,
+    val value1: String,
+    val value2: String,
+    val value3: String
 )

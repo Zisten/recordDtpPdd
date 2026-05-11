@@ -4,7 +4,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -29,30 +29,29 @@ fun AccidentFormScreen(
         )
         Spacer(Modifier.height(8.dp))
 
-        // Индикатор шагов
         StepIndicator(current = vm.currentStep, total = vm.totalSteps)
         Spacer(Modifier.height(16.dp))
 
-        // Контент шага
         Box(modifier = Modifier.weight(1f)) {
             when (vm.currentStep) {
                 0 -> Step1GeneralInfo(vm)
-                1 -> Step2SelectSide(vm)
-                2 -> Step3VehicleData(vm)
-                3 -> Step4DriverData(vm)
-                4 -> Step5Damages(vm)
-                5 -> Step6Circumstances(vm)
-                6 -> Step7Completion(vm)
+                1 -> Step2VehicleData(vm)
+                2 -> Step3DriverData(vm)
+                3 -> Step4Damages(vm)
+                4 -> Step5AccidentType(vm)
+                5 -> Step6Completion(vm)
             }
         }
 
-        // Сообщение об ошибке
+        if (vm.validationError.isNotBlank()) {
+            Text(vm.validationError, color = MaterialTheme.colorScheme.error, fontSize = 13.sp)
+            Spacer(Modifier.height(4.dp))
+        }
         if (vm.saveError.isNotBlank()) {
             Text(vm.saveError, color = MaterialTheme.colorScheme.error, fontSize = 13.sp)
             Spacer(Modifier.height(4.dp))
         }
 
-        // Навигационные кнопки
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween
@@ -64,11 +63,14 @@ fun AccidentFormScreen(
             }
 
             if (vm.currentStep < vm.totalSteps - 1) {
-                Button(onClick = { vm.nextStep() }) { Text("Далее") }
+                Button(
+                    onClick = { vm.tryNextStep() },
+                    enabled = vm.canGoNext()
+                ) { Text("Далее") }
             } else {
                 Button(
                     onClick = { vm.save(officerId, onDone) },
-                    enabled = !vm.isSaving
+                    enabled = vm.canSave()
                 ) {
                     if (vm.isSaving) CircularProgressIndicator(
                         modifier = Modifier.size(20.dp),
@@ -85,14 +87,14 @@ fun AccidentFormScreen(
 @Composable
 private fun StepIndicator(current: Int, total: Int) {
     val stepNames = listOf(
-        "Общее", "ТС", "Данные ТС", "Водитель", "Повреждения", "Обстоятельства", "Завершение"
+        "Общее", "Данные ТС", "Водитель", "Повреждения", "Тип ДТП", "Завершение"
     )
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(4.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        stepNames.forEachIndexed { i, name ->
+        stepNames.take(total).forEachIndexed { i, name ->
             val active = i == current
             val done = i < current
             FilterChip(
@@ -105,8 +107,6 @@ private fun StepIndicator(current: Int, total: Int) {
         }
     }
 }
-
-// ── Шаг 1: Общая информация ──────────────────────────────────────────────────
 
 @Composable
 private fun Step1GeneralInfo(vm: AccidentFormViewModel) {
@@ -132,53 +132,8 @@ private fun Step1GeneralInfo(vm: AccidentFormViewModel) {
     }
 }
 
-// ── Шаг 2: Выбор стороны ────────────────────────────────────────────────────
-
 @Composable
-private fun Step2SelectSide(vm: AccidentFormViewModel) {
-    Column(
-        modifier = Modifier.fillMaxSize(),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Text(
-            "Выберите, данные какого участника заполнять первым:",
-            fontSize = 16.sp,
-            fontWeight = FontWeight.Medium
-        )
-        Spacer(Modifier.height(24.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
-            listOf("A", "B").forEach { side ->
-                ElevatedButton(
-                    onClick = { vm.currentSide = side },
-                    colors = if (vm.currentSide == side)
-                        ButtonDefaults.elevatedButtonColors(
-                            containerColor = MaterialTheme.colorScheme.primaryContainer
-                        )
-                    else ButtonDefaults.elevatedButtonColors()
-                ) {
-                    Text("Участник $side", fontSize = 18.sp, modifier = Modifier.padding(16.dp))
-                }
-            }
-        }
-        Spacer(Modifier.height(16.dp))
-        Text(
-            "Текущий участник для заполнения: ${vm.currentSide}",
-            color = MaterialTheme.colorScheme.primary
-        )
-        Spacer(Modifier.height(8.dp))
-        Text(
-            "На следующих шагах будут заполнены данные ТС и водителей для обоих участников.",
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            fontSize = 13.sp
-        )
-    }
-}
-
-// ── Шаг 3: Данные ТС ────────────────────────────────────────────────────────
-
-@Composable
-private fun Step3VehicleData(vm: AccidentFormViewModel) {
+private fun Step2VehicleData(vm: AccidentFormViewModel) {
     val scroll = rememberScrollState()
     Column(modifier = Modifier.fillMaxSize().verticalScroll(scroll), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         SectionTitle("ТС участника A")
@@ -200,10 +155,8 @@ private fun VehicleFields(data: VehicleFormData, onUpdate: (VehicleFormData) -> 
     FormField("Адрес собственника", data.ownerAddress) { onUpdate(data.copy(ownerAddress = it)) }
 }
 
-// ── Шаг 4: Данные водителей ─────────────────────────────────────────────────
-
 @Composable
-private fun Step4DriverData(vm: AccidentFormViewModel) {
+private fun Step3DriverData(vm: AccidentFormViewModel) {
     val scroll = rememberScrollState()
     Column(modifier = Modifier.fillMaxSize().verticalScroll(scroll), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         SectionTitle("Водитель A")
@@ -220,8 +173,12 @@ private fun DriverFields(data: DriverFormData, onUpdate: (DriverFormData) -> Uni
     FormField("Дата рождения (гггг-мм-дд)", data.birthdate) { onUpdate(data.copy(birthdate = it)) }
     FormField("Адрес", data.address) { onUpdate(data.copy(address = it)) }
     FormField("Телефон", data.phone) { onUpdate(data.copy(phone = it)) }
-    Text("Водительское удостоверение", fontWeight = FontWeight.Medium, fontSize = 13.sp,
-        color = MaterialTheme.colorScheme.secondary)
+    Text(
+        "Водительское удостоверение",
+        fontWeight = FontWeight.Medium,
+        fontSize = 13.sp,
+        color = MaterialTheme.colorScheme.secondary
+    )
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         OutlinedTextField(
             value = data.licSeries, onValueChange = { onUpdate(data.copy(licSeries = it)) },
@@ -237,8 +194,7 @@ private fun DriverFields(data: DriverFormData, onUpdate: (DriverFormData) -> Uni
         )
     }
     FormField("Дата выдачи ВУ (гггг-мм-дд)", data.licIssueDate) { onUpdate(data.copy(licIssueDate = it)) }
-    Text("Страховой полис", fontWeight = FontWeight.Medium, fontSize = 13.sp,
-        color = MaterialTheme.colorScheme.secondary)
+    Text("Страховой полис", fontWeight = FontWeight.Medium, fontSize = 13.sp, color = MaterialTheme.colorScheme.secondary)
     FormField("Наименование страховой", data.insCompany) { onUpdate(data.copy(insCompany = it)) }
     FormField("Номер полиса", data.insPolicy) { onUpdate(data.copy(insPolicy = it)) }
     FormField("Дата окончания полиса", data.insExpiry) { onUpdate(data.copy(insExpiry = it)) }
@@ -248,10 +204,8 @@ private fun DriverFields(data: DriverFormData, onUpdate: (DriverFormData) -> Uni
     }
 }
 
-// ── Шаг 5: Повреждения ──────────────────────────────────────────────────────
-
 @Composable
-private fun Step5Damages(vm: AccidentFormViewModel) {
+private fun Step4Damages(vm: AccidentFormViewModel) {
     val scroll = rememberScrollState()
     Column(modifier = Modifier.fillMaxSize().verticalScroll(scroll), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         SectionTitle("Повреждения ТС A")
@@ -280,38 +234,35 @@ private fun Step5Damages(vm: AccidentFormViewModel) {
     }
 }
 
-// ── Шаг 6: Обстоятельства ───────────────────────────────────────────────────
-
 @Composable
-private fun Step6Circumstances(vm: AccidentFormViewModel) {
+private fun Step5AccidentType(vm: AccidentFormViewModel) {
     val scroll = rememberScrollState()
-    Column(modifier = Modifier.fillMaxSize().verticalScroll(scroll), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        SectionTitle("Обстоятельства ДТП")
-        Text(
-            "Отметьте все подходящие обстоятельства:",
-            fontSize = 13.sp,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Spacer(Modifier.height(4.dp))
-        ACCIDENT_CIRCUMSTANCES.forEach { item ->
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Checkbox(
-                    checked = vm.selectedCircumstances.contains(item),
-                    onCheckedChange = { vm.toggleCircumstance(item) }
-                )
-                Text(item, fontSize = 14.sp)
+    Column(modifier = Modifier.fillMaxSize().verticalScroll(scroll), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        SectionTitle("Обстоятельства / тип ДТП")
+        if (vm.accidentTypes.isEmpty()) {
+            Text("Справочник типов ДТП пуст или не загружен.", color = MaterialTheme.colorScheme.error)
+            OutlinedButton(onClick = { vm.loadAccidentTypes() }) { Text("Повторить загрузку") }
+        } else {
+            vm.accidentTypes.forEach { type ->
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                    RadioButton(
+                        selected = vm.selectedAccidentTypeId == type.id,
+                        onClick = { vm.selectedAccidentTypeId = type.id }
+                    )
+                    Column {
+                        Text(type.name, fontSize = 14.sp)
+                        if (!type.description.isNullOrBlank()) {
+                            Text(type.description, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                }
             }
         }
     }
 }
 
-// ── Шаг 7: Завершение ───────────────────────────────────────────────────────
-
 @Composable
-private fun Step7Completion(vm: AccidentFormViewModel) {
+private fun Step6Completion(vm: AccidentFormViewModel) {
     val scroll = rememberScrollState()
     Column(modifier = Modifier.fillMaxSize().verticalScroll(scroll), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         SectionTitle("Завершение оформления")
@@ -338,18 +289,18 @@ private fun Step7Completion(vm: AccidentFormViewModel) {
                 Text("Место: ${vm.locationStreet} ${vm.locationBuilding}", fontSize = 13.sp)
                 Text("Дата/время: ${vm.accidentDate} ${vm.accidentTime}", fontSize = 13.sp)
                 Text("Виновный: ${vm.guiltySide}", fontSize = 13.sp)
-                Text("Обстоятельств: ${vm.selectedCircumstances.size}", fontSize = 13.sp)
+                Text("Тип ДТП ID: ${vm.selectedAccidentTypeId ?: "-"}", fontSize = 13.sp)
             }
         }
     }
 }
 
-// ── Вспомогательные компоненты ───────────────────────────────────────────────
-
 @Composable
 private fun SectionTitle(text: String) {
     Text(
-        text, fontWeight = FontWeight.SemiBold, fontSize = 15.sp,
+        text,
+        fontWeight = FontWeight.SemiBold,
+        fontSize = 15.sp,
         color = MaterialTheme.colorScheme.primary
     )
 }
