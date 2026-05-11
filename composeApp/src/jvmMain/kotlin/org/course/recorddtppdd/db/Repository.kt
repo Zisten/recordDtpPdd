@@ -502,7 +502,11 @@ object Repository {
 
             // Хранимые процедуры / функции (3)
             "Процедура 1: sp_daily_stats" to "CALL sp_daily_stats(CURDATE())",
-            "Процедура 2: sp_accident_participants" to "CALL sp_accident_participants(1)",
+            "Процедура 2: sp_accident_participants (минимальный accident_id)" to """
+                CALL sp_accident_participants(
+                    COALESCE((SELECT MIN(accident_id) FROM AccidentsRecords), 0)
+                )
+            """.trimIndent(),
             "Функция 3: fn_driver_violation_count" to """
                 SELECT driver_id, fn_driver_violation_count(driver_id) AS violations_total
                 FROM Drivers
@@ -548,20 +552,25 @@ object Repository {
                 LIMIT 10
             """.trimIndent()
         )
+        val allowedSql = queries.map { (_, sql) -> sql.trim() }.toSet()
 
         queries.map { (title, sql) ->
             SqlReportQuery(
                 title = title,
                 sql = sql,
-                rows = execSqlReportQuery(sql)
+                rows = execSqlReportQuery(sql, allowedSql)
             )
         }
     }
 
-    private fun execSqlReportQuery(sql: String): List<String> {
+    private fun execSqlReportQuery(sql: String, allowedSql: Set<String>): List<String> {
         val rows = mutableListOf<String>()
         try {
-            TransactionManager.current().exec(sql) { rs ->
+            val normalizedSql = sql.trim()
+            if (normalizedSql !in allowedSql) {
+                return listOf("Ошибка: запрос не разрешён для выполнения")
+            }
+            TransactionManager.current().exec(normalizedSql) { rs ->
                 val metadata = rs.metaData
                 val columns = metadata.columnCount
                 var rowCount = 0

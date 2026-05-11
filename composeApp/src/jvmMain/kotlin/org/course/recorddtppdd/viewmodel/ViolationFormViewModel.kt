@@ -66,12 +66,13 @@ class ViolationFormViewModel {
     fun prevStep() { if (currentStep > 0) currentStep-- }
 
     fun loadViolationTypes() {
+        violationTypes.clear()
         try {
             val types = Repository.getAllViolationTypes()
-            violationTypes.clear()
             violationTypes.addAll(types)
         } catch (_: Exception) {
-            violationTypes.clear()
+            // При недоступности справочника оставляем список пустым.
+            // На шаге нарушения пользователь получит валидационное сообщение.
         }
     }
 

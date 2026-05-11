@@ -37,28 +37,6 @@ data class DriverFormData(
     var hasHull: Boolean = false
 )
 
-val ACCIDENT_CIRCUMSTANCES = listOf(
-    "ТС находился на стоянке, парковке, обочине и т.п в неподвижном состоянии",
-    "Заезжал на стоянку, парковку, во двор, на второстепенную дорогу",
-    "Двигался прямо (не маневрировал)",
-    "Двигался на перекрёстке",
-    "Заезжал на перекресток с круговым движением",
-    "Столкнулся с ТС, двигавшимся в том же направлении по той же полосе",
-    "Столкнулся с ТС, двигавшимся в том же направлении по другой полосе (в другом ряду)",
-    "Менял полосу (перестраивался в другой ряд)",
-    "Обгонял",
-    "Поворачивал направо",
-    "Поворачивал налево",
-    "Совершал разворот",
-    "Двигался задним ходом",
-    "Выехал на сторону дороги, предназначенную для встречного движения",
-    "Второе ТС находилось слева от меня",
-    "Не выполнил требование знака приоритета",
-    "Совершил наезд (на неподвижное ТС, препятствие, пешехода и т.п.)",
-    "Остановился (стоял) на запрещающий сигнал светофора",
-    "Иное"
-)
-
 class AccidentFormViewModel {
     var currentStep by mutableStateOf(0)
     val totalSteps = 6
@@ -112,18 +90,19 @@ class AccidentFormViewModel {
     }
     fun prevStep() { if (currentStep > 0) currentStep-- }
 
-    fun toggleCircumstance(item: String) {
-        if (selectedCircumstances.contains(item)) selectedCircumstances.remove(item)
-        else selectedCircumstances.add(item)
+    fun selectCircumstance(item: String) {
+        selectedCircumstances.clear()
+        selectedCircumstances.add(item)
     }
 
     fun loadAccidentTypes() {
+        accidentTypes.clear()
         try {
             val dbTypes = Repository.getAllAccidentTypes()
-            accidentTypes.clear()
             accidentTypes.addAll(dbTypes)
         } catch (_: Exception) {
-            accidentTypes.clear()
+            // Справочник недоступен (например, проблема подключения) — оставляем список пустым,
+            // UI покажет явное сообщение и не даст выбрать обстоятельство.
         }
     }
 
@@ -154,8 +133,13 @@ class AccidentFormViewModel {
                 }
             }.ifBlank { null }
 
-            val accidentTypeId = selectedCircumstances.firstOrNull()?.let {
-                accidentTypes.firstOrNull { type -> type.name == it }?.id ?: Repository.findAccidentTypeIdByName(it)
+            val selectedCircumstance = selectedCircumstances.firstOrNull()
+            val accidentTypeId = selectedCircumstance?.let { selectedName ->
+                accidentTypes.firstOrNull { type -> type.name == selectedName }?.id
+            }
+            if (accidentTypeId == null) {
+                saveError = "Не удалось сохранить ДТП: выбранное обстоятельство не найдено в справочнике"
+                return
             }
 
             val accidentId = Repository.insertAccident(

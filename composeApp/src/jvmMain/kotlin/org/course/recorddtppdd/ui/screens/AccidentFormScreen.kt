@@ -245,11 +245,19 @@ private fun Step4Damages(vm: AccidentFormViewModel) {
 @Composable
 private fun Step5Circumstances(vm: AccidentFormViewModel) {
     val scroll = rememberScrollState()
-    val circumstanceItems = vm.accidentTypes.map { it.name }.ifEmpty { ACCIDENT_CIRCUMSTANCES }
+    val circumstanceItems = vm.accidentTypes.map { it.name }
     Column(modifier = Modifier.fillMaxSize().verticalScroll(scroll), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         SectionTitle("Обстоятельства ДТП")
+        if (circumstanceItems.isEmpty()) {
+            Text(
+                "Справочник AccidentTypes не загружен. Проверьте наличие данных в БД.",
+                fontSize = 13.sp,
+                color = MaterialTheme.colorScheme.error
+            )
+            return@Column
+        }
         Text(
-            "Отметьте все подходящие обстоятельства:",
+            "Выберите одно обстоятельство из справочника AccidentTypes:",
             fontSize = 13.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -259,9 +267,9 @@ private fun Step5Circumstances(vm: AccidentFormViewModel) {
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Checkbox(
-                    checked = vm.selectedCircumstances.contains(item),
-                    onCheckedChange = { vm.toggleCircumstance(item) }
+                RadioButton(
+                    selected = vm.selectedCircumstances.contains(item),
+                    onClick = { vm.selectCircumstance(item) }
                 )
                 Text(item, fontSize = 14.sp)
             }
