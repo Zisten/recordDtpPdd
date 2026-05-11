@@ -124,9 +124,9 @@ private fun AccidentsTable(vm: HomeViewModel) {
             rows = rows.map { a ->
                 listOf(
                     a.id.toString(),
-                    a.locationStreet,
-                    a.locationBuilding,
-                    a.datetime.format(dtFmt),
+                    a.street,
+                    a.house ?: "-",
+                    a.dateTime.format(dtFmt),
                     a.guiltySide
                 )
             }
@@ -162,9 +162,9 @@ private fun ViolationsTable(vm: HomeViewModel) {
             rows = rows.map { v ->
                 listOf(
                     v.id.toString(),
-                    v.driverId.toString(),
+                    v.driverFullName,
                     v.npaPoint,
-                    v.datetime.format(dtFmt)
+                    v.dateTime.format(dtFmt)
                 )
             }
         )

@@ -57,7 +57,8 @@ data class AccidentRecord(
     val house: String?,
     val witnessesInfo: String?,
     val circumstancesJson: String?,
-    val explanation: String?
+    val explanation: String?,
+    val guiltySide: String
 )
 
 data class AccidentParticipant(
@@ -87,7 +88,9 @@ data class ViolationRecord(
     val dateTime: LocalDateTime,
     val street: String,
     val houseNumber: String?,
-    val witnessVictimInfo: String?
+    val witnessVictimInfo: String?,
+    val npaPoint: String,
+    val driverFullName: String
 )
 
 /** Сводные данные для главного экрана */

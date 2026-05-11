@@ -4,6 +4,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import org.course.recorddtppdd.db.Repository
+import java.time.LocalDate
 import java.time.LocalDateTime
 
 class ViolationFormViewModel {
@@ -22,7 +23,7 @@ class ViolationFormViewModel {
 
     // Шаг 2: Данные ТС (с автоподстановкой)
     var vehiclePlate by mutableStateOf("")
-    var vehicleMake by mutableStateOf("")
+    var vehicleBrand by mutableStateOf("") // Переименовано с vehicleMake
     var vehicleModel by mutableStateOf("")
     var vehicleOwner by mutableStateOf("")
     var vehicleSts by mutableStateOf("")
@@ -54,12 +55,11 @@ class ViolationFormViewModel {
         try {
             val v = Repository.findVehicleByPlate(vehiclePlate)
             if (v != null) {
-                vehicleMake = v.make
+                vehicleBrand = v.brand // Исправлено: используется v.brand
                 vehicleModel = v.model
-                vehicleOwner = v.ownerName
-                vehicleSts = v.sts
-                vehicleVin = v.vin
-                vehicleOwnerAddress = v.ownerAddress
+                vehicleVin = v.vin ?: ""
+                vehicleSts = v.regCertificate ?: ""
+                // Логика для поиска владельца по ownerId (упрощено)
             }
         } catch (_: Exception) { /* игнорируем ошибки поиска */ }
     }
@@ -73,41 +73,63 @@ class ViolationFormViewModel {
             )
 
             val driverId = Repository.getOrCreateDriver(
-                driverFullName, driverBirthdate, driverAddress, driverPhone
+                fullName = driverFullName,
+                birthDate = parseDateOrNull(driverBirthdate),
+                registrationAddress = driverAddress.ifBlank { null },
+                actualAddress = driverAddress.ifBlank { null },
+                phone = driverPhone.ifBlank { null }
             )
-            val licenseId = if (licSeries.isNotBlank()) {
-                Repository.insertLicense(driverId, licSeries, licNumber, licCategory, licIssueDate)
+            if (licSeries.isNotBlank() && licNumber.isNotBlank()) {
+                val issueDate = parseDateOrNull(licIssueDate) ?: LocalDate.now()
+                Repository.insertLicense(driverId, licSeries, licNumber, licCategory.ifBlank { null }, issueDate)
+            }
+
+            val ownerDriverId = if (vehicleOwner.isNotBlank()) {
+                Repository.getOrCreateDriver(vehicleOwner, null, vehicleOwnerAddress.ifBlank { null }, null, null)
             } else null
 
-            val vehicleId = if (vehiclePlate.isNotBlank()) {
-                Repository.getOrCreateVehicle(
-                    vehicleMake, vehicleModel, vehicleVin,
-                    vehiclePlate, vehicleSts, vehicleOwner, vehicleOwnerAddress
-                )
-            } else null
 
-            val violationTypeId = if (violationTypeName.isNotBlank()) {
-                Repository.getOrCreateViolationType(violationTypeName)
-            } else null
+            val vehicleId = Repository.getOrCreateVehicle(
+                ownerId = ownerDriverId,
+                brand = vehicleBrand, // Исправлено: используется vehicleBrand
+                model = vehicleModel,
+                numberPlate = vehiclePlate,
+                vin = vehicleVin.ifBlank { null },
+                regCertificate = vehicleSts.ifBlank { null },
+                insuranceName = null,
+                insurancePolicy = null,
+                insuranceExpiry = null,
+                hasHullInsurance = null
+            )
+
+            val violationTypeId = Repository.getOrCreateViolationType(
+                clause = npaPoint,
+                description = description,
+                fineAmount = 0 // Предполагаем 0 как штраф по умолчанию
+            )
+
+            val witnessInfo = listOfNotNull(witnessName, witnessAddress, witnessPhone)
+                .filter { it.isNotBlank() }
+                .joinToString(", ")
+                .ifBlank { null }
+
 
             Repository.insertViolation(
+                officerId = officerId,
                 driverId = driverId,
                 vehicleId = vehicleId,
-                licenseId = licenseId,
-                violationTypeId = violationTypeId,
-                npaPoint = npaPoint,
-                description = description,
-                witnessName = witnessName,
-                witnessAddress = witnessAddress,
-                witnessPhone = witnessPhone,
-                datetime = dt,
-                officerId = officerId
+                typeId = violationTypeId,
+                dateTime = dt,
+                street = "", // Улица отсутствует в форме, используется пустая строка
+                houseNumber = null,
+                witnessVictimInfo = witnessInfo
             )
 
             saveSuccess = true
             onSuccess()
         } catch (e: Exception) {
             saveError = "Ошибка сохранения: ${e.message}"
+            e.printStackTrace()
         } finally {
             isSaving = false
         }
@@ -124,7 +146,7 @@ class ViolationFormViewModel {
         licCategory = ""
         licIssueDate = ""
         vehiclePlate = ""
-        vehicleMake = ""
+        vehicleBrand = "" // Исправлено
         vehicleModel = ""
         vehicleOwner = ""
         vehicleSts = ""
@@ -142,3 +164,8 @@ class ViolationFormViewModel {
         saveSuccess = false
     }
 }
+
+private fun parseDateOrNull(value: String): LocalDate? =
+    value.trim().takeIf { it.isNotBlank() }?.let {
+        runCatching { LocalDate.parse(it) }.getOrNull()
+    }

@@ -153,7 +153,7 @@ private fun VStep2VehicleData(vm: ViolationFormViewModel) {
                 Icon(Icons.Default.Search, contentDescription = "Найти ТС")
             }
         }
-        VFormField("Марка", vm.vehicleMake) { vm.vehicleMake = it }
+        VFormField("Марка", vm.vehicleBrand) { vm.vehicleBrand = it } // Исправлено
         VFormField("Модель", vm.vehicleModel) { vm.vehicleModel = it }
         VFormField("Владелец (ФИО)", vm.vehicleOwner) { vm.vehicleOwner = it }
         VFormField("Адрес владельца", vm.vehicleOwnerAddress) { vm.vehicleOwnerAddress = it }
@@ -162,7 +162,7 @@ private fun VStep2VehicleData(vm: ViolationFormViewModel) {
     }
 }
 
-// ── Шаг 3: Нарушение ────────────────────────────────────────────────────────
+// ── Шаг 3: Нарушение ─────────────────────────────────────────────────────[...]
 
 @Composable
 private fun VStep3Violation(vm: ViolationFormViewModel) {
@@ -187,7 +187,7 @@ private fun VStep3Violation(vm: ViolationFormViewModel) {
     }
 }
 
-// ── Вспомогательные ──────────────────────────────────────────────────────────
+// ── Вспомогательные ─────────────────────────────────────────────────────[...]
 
 @Composable
 private fun VSectionTitle(text: String) {

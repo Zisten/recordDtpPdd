@@ -6,6 +6,7 @@ import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.transactions.transaction
 import java.time.LocalDate
 import java.time.LocalDateTime
+import java.util.regex.Pattern
 
 /**
  * Репозиторий — операции с БД через Exposed DSL.
@@ -13,7 +14,7 @@ import java.time.LocalDateTime
  */
 object Repository {
 
-    // ── Officers ─────────────────────────────────────────────────────────────
+    // ── Officers ───────────────────────────────────────────────────────────[...]
 
     fun findOfficerByCredentials(login: String, password: String): Officer? = transaction {
         Officers
@@ -29,7 +30,7 @@ object Repository {
         password = row[Officers.password]
     )
 
-    // ── Drivers ──────────────────────────────────────────────────────────────
+    // ── Drivers ───────────────────────────────────────────────────────────[...]
 
     fun getAllDrivers(): List<Driver> = transaction {
         Drivers.selectAll().map { toDriver(it) }
@@ -98,7 +99,7 @@ object Repository {
         )
     }
 
-    // ── Licenses ─────────────────────────────────────────────────────────────
+    // ── Licenses ───────────────────────────────────────────────────────────[...]
 
     fun insertLicense(
         driverId: Int,
@@ -132,7 +133,7 @@ object Repository {
         issueDate = row[Licenses.issueDate]
     )
 
-    // ── Vehicles ─────────────────────────────────────────────────────────────
+    // ── Vehicles ───────────────────────────────────────────────────────────[...]
 
     fun getAllVehicles(): List<Vehicle> = transaction {
         Vehicles.selectAll().map { toVehicle(it) }
@@ -242,17 +243,26 @@ object Repository {
         }[AccidentsRecords.id]
     }
 
-    private fun toAccident(row: ResultRow) = AccidentRecord(
-        id = row[AccidentsRecords.id],
-        officerId = row[AccidentsRecords.officerId],
-        typeId = row[AccidentsRecords.typeId],
-        dateTime = row[AccidentsRecords.dateTime],
-        street = row[AccidentsRecords.street],
-        house = row[AccidentsRecords.house],
-        witnessesInfo = row[AccidentsRecords.witnessesInfo],
-        circumstancesJson = row[AccidentsRecords.circumstancesJson],
-        explanation = row[AccidentsRecords.explanation]
-    )
+    private fun toAccident(row: ResultRow): AccidentRecord {
+        val explanation = row[AccidentsRecords.explanation]
+        val pattern = Pattern.compile("Виновный: (.*)", Pattern.CASE_INSENSITIVE)
+        val matcher = explanation?.let { pattern.matcher(it) }
+        val guiltySide = if (matcher?.find() == true) matcher.group(1) else "не определён"
+
+        return AccidentRecord(
+            id = row[AccidentsRecords.id],
+            officerId = row[AccidentsRecords.officerId],
+            typeId = row[AccidentsRecords.typeId],
+            dateTime = row[AccidentsRecords.dateTime],
+            street = row[AccidentsRecords.street],
+            house = row[AccidentsRecords.house],
+            witnessesInfo = row[AccidentsRecords.witnessesInfo],
+            circumstancesJson = row[AccidentsRecords.circumstancesJson],
+            explanation = explanation,
+            guiltySide = guiltySide
+        )
+    }
+
 
     // ── AccidentParticipants ────────────────────────────────────────────────
 
@@ -305,7 +315,8 @@ object Repository {
     // ── ViolationRecords ────────────────────────────────────────────────────
 
     fun getAllViolations(): List<ViolationRecord> = transaction {
-        ViolationRecords.selectAll()
+        (ViolationRecords innerJoin Drivers innerJoin ViolationsTypes)
+            .selectAll()
             .orderBy(ViolationRecords.dateTime, SortOrder.DESC)
             .map { toViolation(it) }
     }
@@ -341,10 +352,12 @@ object Repository {
         dateTime = row[ViolationRecords.dateTime],
         street = row[ViolationRecords.street],
         houseNumber = row[ViolationRecords.houseNumber],
-        witnessVictimInfo = row[ViolationRecords.witnessVictimInfo]
+        witnessVictimInfo = row[ViolationRecords.witnessVictimInfo],
+        npaPoint = row[ViolationsTypes.clause],
+        driverFullName = buildFullName(row[Drivers.lastName], row[Drivers.firstName], row[Drivers.middleName])
     )
 
-    // ── Stats ───────────────────────────────────────────────────────────────
+    // ── Stats ────────────────────────────────────────────────────────────[...]
 
     fun getHomeStats(): HomeStats {
         val today = java.time.LocalDate.now()
@@ -353,7 +366,7 @@ object Repository {
         return HomeStats(accidents, violations)
     }
 
-    // ── Helpers ─────────────────────────────────────────────────────────────
+    // ── Helpers ───────────────────────────────────────────────────────────[...]
 
     private fun splitFullName(fullName: String): Triple<String, String, String?> {
         val parts = fullName.trim().split(Regex("\\s+"))
