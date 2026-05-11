@@ -1,9 +1,11 @@
 package org.course.recorddtppdd.viewmodel
 
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import org.course.recorddtppdd.db.Repository
+import org.course.recorddtppdd.model.ViolationType
 import java.time.LocalDate
 import java.time.LocalDateTime
 
@@ -33,6 +35,8 @@ class ViolationFormViewModel {
     // Шаг 3: Нарушение
     var violationTypeName by mutableStateOf("")
     var npaPoint by mutableStateOf("")
+    var violationStreet by mutableStateOf("")
+    var violationHouse by mutableStateOf("")
     var description by mutableStateOf("")
     var witnessName by mutableStateOf("")
     var witnessAddress by mutableStateOf("")
@@ -43,9 +47,41 @@ class ViolationFormViewModel {
     var isSaving by mutableStateOf(false)
     var saveError by mutableStateOf("")
     var saveSuccess by mutableStateOf(false)
+    val violationTypes = mutableStateListOf<ViolationType>()
 
-    fun nextStep() { if (currentStep < totalSteps - 1) currentStep++ }
+    init {
+        loadViolationTypes()
+    }
+
+    fun nextStep(): Boolean {
+        val validationError = validateStep(currentStep)
+        if (validationError != null) {
+            saveError = validationError
+            return false
+        }
+        saveError = ""
+        if (currentStep < totalSteps - 1) currentStep++
+        return true
+    }
     fun prevStep() { if (currentStep > 0) currentStep-- }
+
+    fun loadViolationTypes() {
+        violationTypes.clear()
+        try {
+            val types = Repository.getAllViolationTypes()
+            violationTypes.addAll(types)
+        } catch (_: Exception) {
+            // При недоступности справочника оставляем список пустым.
+            // На шаге нарушения пользователь получит валидационное сообщение.
+        }
+    }
+
+    fun selectViolationClause(clause: String) {
+        npaPoint = clause
+        violationTypes.firstOrNull { it.clause == clause }?.let { type ->
+            violationTypeName = type.description
+        }
+    }
 
     /**
      * Автоподстановка данных ТС по госномеру из БД.
@@ -68,6 +104,11 @@ class ViolationFormViewModel {
         isSaving = true
         saveError = ""
         try {
+            val finalValidationError = validateAllRequiredFields()
+            if (finalValidationError != null) {
+                saveError = finalValidationError
+                return
+            }
             val dt = LocalDateTime.parse(
                 "${violationDate}T${violationTime.padStart(5, '0')}:00"
             )
@@ -102,11 +143,10 @@ class ViolationFormViewModel {
                 hasHullInsurance = null
             )
 
-            val violationTypeId = Repository.getOrCreateViolationType(
-                clause = npaPoint,
-                description = description,
-                fineAmount = 0 // Предполагаем 0 как штраф по умолчанию
-            )
+            val violationTypeId = violationTypes
+                .firstOrNull { it.clause == npaPoint }
+                ?.id
+                ?: throw IllegalStateException("Выберите пункт НПА из списка ViolationsTypes")
 
             val witnessInfo = listOfNotNull(witnessName, witnessAddress, witnessPhone)
                 .filter { it.isNotBlank() }
@@ -120,8 +160,8 @@ class ViolationFormViewModel {
                 vehicleId = vehicleId,
                 typeId = violationTypeId,
                 dateTime = dt,
-                street = "", // Улица отсутствует в форме, используется пустая строка
-                houseNumber = null,
+                street = violationStreet.trim(),
+                houseNumber = violationHouse.trim().ifBlank { null },
                 witnessVictimInfo = witnessInfo
             )
 
@@ -154,6 +194,8 @@ class ViolationFormViewModel {
         vehicleOwnerAddress = ""
         violationTypeName = ""
         npaPoint = ""
+        violationStreet = ""
+        violationHouse = ""
         description = ""
         witnessName = ""
         witnessAddress = ""
@@ -162,7 +204,40 @@ class ViolationFormViewModel {
         violationTime = "12:00"
         saveError = ""
         saveSuccess = false
+        loadViolationTypes()
     }
+
+    private fun validateStep(step: Int): String? = when (step) {
+        0 -> if (!isValidFullName(driverFullName)) {
+            "Заполните обязательное поле: ФИО нарушителя (минимум фамилия и имя)"
+        } else null
+        1 -> {
+            val missing = mutableListOf<String>()
+            if (vehicleBrand.isBlank()) missing += "марка ТС"
+            if (vehicleModel.isBlank()) missing += "модель ТС"
+            if (vehiclePlate.isBlank()) missing += "госномер ТС"
+            missing.takeIf { it.isNotEmpty() }?.let {
+                "Заполните обязательные поля: ${it.joinToString(", ")}"
+            }
+        }
+        2 -> when {
+            npaPoint.isBlank() -> "Выберите пункт НПА из списка"
+            violationTypeName.isBlank() -> "Не удалось определить вид нарушения по выбранному НПА"
+            violationStreet.isBlank() -> "Заполните обязательное поле: улица нарушения"
+            violationDate.isBlank() -> "Заполните обязательное поле: дата нарушения"
+            violationTime.isBlank() -> "Заполните обязательное поле: время нарушения"
+            else -> null
+        }
+        else -> null
+    }
+
+    private fun validateAllRequiredFields(): String? {
+        val validationSteps = listOf(0, 1, 2)
+        return validationSteps.firstNotNullOfOrNull { step -> validateStep(step) }
+    }
+
+    private fun isValidFullName(value: String): Boolean =
+        value.trim().split(Regex("\\s+")).size >= 2
 }
 
 private fun parseDateOrNull(value: String): LocalDate? =

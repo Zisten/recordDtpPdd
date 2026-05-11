@@ -20,6 +20,10 @@ fun ViolationFormScreen(
     officerId: Int,
     onDone: () -> Unit
 ) {
+    LaunchedEffect(Unit) {
+        vm.loadViolationTypes()
+    }
+
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
         Text(
             "Оформление нарушения ПДД",
@@ -165,12 +169,49 @@ private fun VStep2VehicleData(vm: ViolationFormViewModel) {
 // ── Шаг 3: Нарушение ─────────────────────────────────────────────────────[...]
 
 @Composable
+@OptIn(ExperimentalMaterial3Api::class)
 private fun VStep3Violation(vm: ViolationFormViewModel) {
     val scroll = rememberScrollState()
+    var npaExpanded by remember { mutableStateOf(false) }
     Column(modifier = Modifier.fillMaxSize().verticalScroll(scroll), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         VSectionTitle("Данные нарушения")
-        VFormField("Вид нарушения (наименование)", vm.violationTypeName) { vm.violationTypeName = it }
-        VFormField("Пункт НПА", vm.npaPoint) { vm.npaPoint = it }
+        ExposedDropdownMenuBox(
+            expanded = npaExpanded,
+            onExpandedChange = { npaExpanded = !npaExpanded }
+        ) {
+            OutlinedTextField(
+                value = vm.npaPoint,
+                onValueChange = {},
+                readOnly = true,
+                label = { Text("Пункт НПА") },
+                modifier = Modifier.menuAnchor().fillMaxWidth(),
+                singleLine = true
+            )
+            ExposedDropdownMenu(
+                expanded = npaExpanded,
+                onDismissRequest = { npaExpanded = false }
+            ) {
+                vm.violationTypes.forEach { type ->
+                    DropdownMenuItem(
+                        text = { Text(type.clause) },
+                        onClick = {
+                            vm.selectViolationClause(type.clause)
+                            npaExpanded = false
+                        }
+                    )
+                }
+            }
+        }
+        OutlinedTextField(
+            value = vm.violationTypeName,
+            onValueChange = {},
+            readOnly = true,
+            label = { Text("Вид нарушения (наименование)") },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true
+        )
+        VFormField("Улица нарушения", vm.violationStreet) { vm.violationStreet = it }
+        VFormField("Дом", vm.violationHouse) { vm.violationHouse = it }
         OutlinedTextField(
             value = vm.description, onValueChange = { vm.description = it },
             label = { Text("Суть нарушения") },
