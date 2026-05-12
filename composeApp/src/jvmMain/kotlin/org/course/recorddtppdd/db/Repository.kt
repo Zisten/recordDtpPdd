@@ -3,20 +3,15 @@ package org.course.recorddtppdd.db
 import org.course.recorddtppdd.model.*
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.isNull
 import org.jetbrains.exposed.sql.transactions.transaction
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.util.regex.Pattern
-import org.jetbrains.exposed.sql.transactions.transaction
-import java.sql.ResultSet
 
-/**
- * Репозиторий — операции с БД через Exposed DSL.
- * Привязан к вашей реальной схеме MySQL.
- */
 object Repository {
 
-    // ── Officers ───────────────────────────────────────────────────────────[...]
+    // ── Officers ───────────────────────────────────────────────────────────
 
     fun findOfficerByCredentials(login: String, password: String): Officer? = transaction {
         Officers
@@ -32,80 +27,36 @@ object Repository {
         password = row[Officers.password]
     )
 
-    fun getComplexAnalyticsReport(): List<String> = transaction {
-        val reportLines = mutableListOf<String>()
-
-        val sql = """
-            -- CTE 1, CTE 2, CTE 3
-            WITH MonthlyStats AS (
-                SELECT DATE_FORMAT(date_time, '%Y-%m') as month_val, COUNT(*) as accident_count
-                FROM AccidentRecords
-                GROUP BY month_val
-            ),
-            TopViolators AS (
-                SELECT driver_id, COUNT(*) as v_count 
-                FROM ViolationRecords 
-                GROUP BY driver_id 
-                HAVING v_count > (SELECT AVG(v_cnt) FROM (SELECT COUNT(*) as v_cnt FROM ViolationRecords GROUP BY driver_id) as sub1) -- Подзапрос 1 и 2
-            ),
-            JoinedData AS (
-                -- 3 JOIN-запроса
-                SELECT vr.record_id, d.last_name, vt.fine_amount, vr.date_time, vr.driver_id
-                FROM ViolationRecords vr
-                INNER JOIN Drivers d ON vr.driver_id = d.driver_id
-                LEFT JOIN ViolationsTypes vt ON vr.type_id = vt.type_id
-            )
-            SELECT 
-                last_name,
-                fine_amount,
-                date_time,
-                -- 4 Оконные функции
-                ROW_NUMBER() OVER(PARTITION BY driver_id ORDER BY date_time) as incident_num,
-                SUM(fine_amount) OVER(PARTITION BY driver_id) as total_driver_fines,
-                LAG(date_time) OVER(PARTITION BY driver_id ORDER BY date_time) as prev_incident_date,
-                RANK() OVER(ORDER BY fine_amount DESC) as fine_rank
-            FROM JoinedData
-            ORDER BY date_time DESC
-            LIMIT 20;
-        """.trimIndent()
-
-        exec(sql) { rs: ResultSet ->
-            while (rs.next()) {
-                val name = rs.getString("last_name")
-                val fine = rs.getInt("fine_amount")
-                val num = rs.getInt("incident_num")
-                val total = rs.getInt("total_driver_fines")
-                val rank = rs.getInt("fine_rank")
-                reportLines.add("Водитель: $name | Штраф: $fine | Нарушение №: $num | Всего штрафов: $total | Ранг: $rank")
-            }
-        }
-        reportLines
-    }
-
-
-
-    // ── Drivers ───────────────────────────────────────────────────────────[...]
+    // ── Drivers ───────────────────────────────────────────────────────────
 
     fun getAllDrivers(): List<Driver> = transaction {
         Drivers.selectAll().map { toDriver(it) }
     }
 
-    /** Очень простой поиск (ФИО + телефон). */
+    fun findDriverById(id: Int): Driver? = transaction {
+        Drivers.selectAll()
+            .where { Drivers.id eq id }
+            .map { toDriver(it) }
+            .firstOrNull()
+    }
+
     fun findDriverByNameAndPhone(fullName: String, phone: String?): Driver? = transaction {
         val (ln, fn, mn) = splitFullName(fullName)
 
-        val base = (Drivers.lastName eq ln) and (Drivers.firstName eq fn) and (Drivers.phone eq phone)
+        val base = (Drivers.lastName eq ln) and (Drivers.firstName eq fn)
 
-        // В некоторых версиях Exposed нет extension isNull(), поэтому используем eq null.
+        // Более гибкий поиск: если телефон передан, ищем с ним, если нет — только по ФИО
+        val phoneExpr: Op<Boolean> = if (phone.isNullOrBlank()) Op.TRUE else Drivers.phone eq phone
+
         val middleExpr: Op<Boolean> = if (mn == null) {
-            Drivers.middleName eq null
+            Drivers.middleName.isNull() or (Drivers.middleName eq "")
         } else {
             Drivers.middleName eq mn
         }
 
         Drivers
             .selectAll()
-            .where { base and middleExpr }
+            .where { base and middleExpr and phoneExpr }
             .map { toDriver(it) }
             .firstOrNull()
     }
@@ -153,7 +104,7 @@ object Repository {
         )
     }
 
-    // ── Licenses ───────────────────────────────────────────────────────────[...]
+    // ── Licenses ───────────────────────────────────────────────────────────
 
     fun insertLicense(
         driverId: Int,
@@ -178,6 +129,13 @@ object Repository {
             .lastOrNull()
     }
 
+    fun findLicenseBySeriesAndNumber(series: String, number: String): License? = transaction {
+        Licenses.selectAll()
+            .where { (Licenses.series eq series) and (Licenses.number eq number) }
+            .map { toLicense(it) }
+            .firstOrNull()
+    }
+
     private fun toLicense(row: ResultRow) = License(
         id = row[Licenses.id],
         driverId = row[Licenses.driverId],
@@ -187,7 +145,7 @@ object Repository {
         issueDate = row[Licenses.issueDate]
     )
 
-    // ── Vehicles ───────────────────────────────────────────────────────────[...]
+    // ── Vehicles ───────────────────────────────────────────────────────────
 
     fun getAllVehicles(): List<Vehicle> = transaction {
         Vehicles.selectAll().map { toVehicle(it) }
@@ -196,6 +154,14 @@ object Repository {
     fun findVehicleByPlate(plate: String): Vehicle? = transaction {
         Vehicles.selectAll()
             .where { Vehicles.numberPlate eq plate }
+            .map { toVehicle(it) }
+            .firstOrNull()
+    }
+
+    // НОВЫЙ МЕТОД: Поиск по VIN
+    fun findVehicleByVin(vin: String): Vehicle? = transaction {
+        Vehicles.selectAll()
+            .where { Vehicles.vin eq vin }
             .map { toVehicle(it) }
             .firstOrNull()
     }
@@ -287,7 +253,6 @@ object Repository {
     ): Int = transaction {
         AccidentsRecords.insert {
             it[AccidentsRecords.officerId] = officerId
-            it[AccidentsRecords.typeId] = typeId
             it[AccidentsRecords.dateTime] = dateTime
             it[AccidentsRecords.street] = street
             it[AccidentsRecords.house] = house
@@ -306,7 +271,6 @@ object Repository {
         return AccidentRecord(
             id = row[AccidentsRecords.id],
             officerId = row[AccidentsRecords.officerId],
-            typeId = row[AccidentsRecords.typeId],
             dateTime = row[AccidentsRecords.dateTime],
             street = row[AccidentsRecords.street],
             house = row[AccidentsRecords.house],
@@ -316,7 +280,6 @@ object Repository {
             guiltySide = guiltySide
         )
     }
-
 
     // ── AccidentParticipants ────────────────────────────────────────────────
 
@@ -411,7 +374,7 @@ object Repository {
         driverFullName = buildFullName(row[Drivers.lastName], row[Drivers.firstName], row[Drivers.middleName])
     )
 
-    // ── Stats ────────────────────────────────────────────────────────────[...]
+    // ── Stats ────────────────────────────────────────────────────────────
 
     fun getHomeStats(): HomeStats {
         val today = java.time.LocalDate.now()
@@ -420,7 +383,7 @@ object Repository {
         return HomeStats(accidents, violations)
     }
 
-    // ── Helpers ───────────────────────────────────────────────────────────[...]
+    // ── Helpers ───────────────────────────────────────────────────────────
 
     private fun splitFullName(fullName: String): Triple<String, String, String?> {
         val parts = fullName.trim().split(Regex("\\s+"))

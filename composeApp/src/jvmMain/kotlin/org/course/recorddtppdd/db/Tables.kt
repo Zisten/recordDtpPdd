@@ -75,7 +75,6 @@ object AccidentsRecords : Table("AccidentsRecords") {
     val id = integer("accident_id").autoIncrement()
 
     val officerId = integer("officer_id").references(Officers.id)
-    val typeId = integer("type_id").nullable() // справочник типов ДТП, сейчас в приложении можно не использовать
 
     val dateTime = datetime("date_time")
     val street = varchar("street", 255)
