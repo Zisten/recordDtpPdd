@@ -7,6 +7,8 @@ import org.jetbrains.exposed.sql.transactions.transaction
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.util.regex.Pattern
+import org.jetbrains.exposed.sql.transactions.transaction
+import java.sql.ResultSet
 
 /**
  * Репозиторий — операции с БД через Exposed DSL.
@@ -29,6 +31,58 @@ object Repository {
         login = row[Officers.login],
         password = row[Officers.password]
     )
+
+    fun getComplexAnalyticsReport(): List<String> = transaction {
+        val reportLines = mutableListOf<String>()
+
+        val sql = """
+            -- CTE 1, CTE 2, CTE 3
+            WITH MonthlyStats AS (
+                SELECT DATE_FORMAT(date_time, '%Y-%m') as month_val, COUNT(*) as accident_count
+                FROM AccidentRecords
+                GROUP BY month_val
+            ),
+            TopViolators AS (
+                SELECT driver_id, COUNT(*) as v_count 
+                FROM ViolationRecords 
+                GROUP BY driver_id 
+                HAVING v_count > (SELECT AVG(v_cnt) FROM (SELECT COUNT(*) as v_cnt FROM ViolationRecords GROUP BY driver_id) as sub1) -- Подзапрос 1 и 2
+            ),
+            JoinedData AS (
+                -- 3 JOIN-запроса
+                SELECT vr.record_id, d.last_name, vt.fine_amount, vr.date_time, vr.driver_id
+                FROM ViolationRecords vr
+                INNER JOIN Drivers d ON vr.driver_id = d.driver_id
+                LEFT JOIN ViolationsTypes vt ON vr.type_id = vt.type_id
+            )
+            SELECT 
+                last_name,
+                fine_amount,
+                date_time,
+                -- 4 Оконные функции
+                ROW_NUMBER() OVER(PARTITION BY driver_id ORDER BY date_time) as incident_num,
+                SUM(fine_amount) OVER(PARTITION BY driver_id) as total_driver_fines,
+                LAG(date_time) OVER(PARTITION BY driver_id ORDER BY date_time) as prev_incident_date,
+                RANK() OVER(ORDER BY fine_amount DESC) as fine_rank
+            FROM JoinedData
+            ORDER BY date_time DESC
+            LIMIT 20;
+        """.trimIndent()
+
+        exec(sql) { rs: ResultSet ->
+            while (rs.next()) {
+                val name = rs.getString("last_name")
+                val fine = rs.getInt("fine_amount")
+                val num = rs.getInt("incident_num")
+                val total = rs.getInt("total_driver_fines")
+                val rank = rs.getInt("fine_rank")
+                reportLines.add("Водитель: $name | Штраф: $fine | Нарушение №: $num | Всего штрафов: $total | Ранг: $rank")
+            }
+        }
+        reportLines
+    }
+
+
 
     // ── Drivers ───────────────────────────────────────────────────────────[...]
 
