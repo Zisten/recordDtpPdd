@@ -16,6 +16,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.course.recorddtppdd.db.Repository
 import org.course.recorddtppdd.model.AccidentRecord
+import org.course.recorddtppdd.model.AnalyticsReport
 import org.course.recorddtppdd.model.HomeStats
 import org.course.recorddtppdd.model.ViolationRecord
 import java.time.format.DateTimeFormatter
@@ -26,7 +27,7 @@ private val dtFmt = DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm")
 fun HomeScreen() {
     val state = remember { HomeState() }
     var selectedTab by remember { mutableStateOf(0) }
-    val tabs = listOf("ДТП", "Нарушения ПДД")
+    val tabs = listOf("ДТП", "Нарушения ПДД", "Аналитика (SQL)")
 
     LaunchedEffect(Unit) {
         state.load()
@@ -83,6 +84,7 @@ fun HomeScreen() {
         when (selectedTab) {
             0 -> AccidentsTable(state)
             1 -> ViolationsTable(state)
+            2 -> AnalyticsTab(state)
         }
     }
 }
@@ -177,11 +179,52 @@ private fun ViolationsTable(state: HomeState) {
     }
 }
 
-/** Простая таблица с заголовками */
 @Composable
-fun DataTable(headers: List<String>, rows: List<List<String>>) {
+private fun AnalyticsTab(state: HomeState) {
+    val scrollState = rememberScrollState()
+    Column(
+        modifier = Modifier.fillMaxSize().verticalScroll(scrollState),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        if (state.analyticsReports.isEmpty()) {
+            Text("Нет данных для аналитики.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        } else {
+            // Группируем отчеты по категориям
+            state.analyticsReports.groupBy { it.category }.forEach { (category, reports) ->
+                Text(
+                    text = category,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(top = 8.dp)
+                )
+                HorizontalDivider()
+
+                reports.forEach { report ->
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Text(report.title, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                            Spacer(Modifier.height(8.dp))
+                            if (report.rows.isEmpty()) {
+                                Text("Нет данных по этому запросу", fontSize = 13.sp)
+                            } else {
+                                DataTable(headers = report.headers, rows = report.rows, isNested = true)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        Spacer(Modifier.height(16.dp))
+    }
+}
+
+@Composable
+fun DataTable(headers: List<String>, rows: List<List<String>>, isNested: Boolean = false) {
     Column(modifier = Modifier.fillMaxWidth()) {
-        // Заголовок таблицы
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -199,16 +242,19 @@ fun DataTable(headers: List<String>, rows: List<List<String>>) {
             }
         }
         HorizontalDivider()
-        // Строки таблицы
-        val scrollState = rememberScrollState()
-        Column(modifier = Modifier.verticalScroll(scrollState)) {
+
+        val contentModifier = if (!isNested) {
+            Modifier.verticalScroll(rememberScrollState())
+        } else Modifier
+
+        Column(modifier = contentModifier) {
             rows.forEachIndexed { idx, row ->
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .background(
                             if (idx % 2 == 0) MaterialTheme.colorScheme.surface
-                            else MaterialTheme.colorScheme.surfaceVariant
+                            else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
                         )
                         .padding(horizontal = 8.dp, vertical = 6.dp)
                 ) {
@@ -226,6 +272,8 @@ private class HomeState {
     var stats by mutableStateOf(HomeStats(0, 0))
     var accidents by mutableStateOf<List<AccidentRecord>>(emptyList())
     var violations by mutableStateOf<List<ViolationRecord>>(emptyList())
+    var analyticsReports by mutableStateOf<List<AnalyticsReport>>(emptyList())
+
     var isLoading by mutableStateOf(false)
     var error by mutableStateOf("")
 
@@ -242,8 +290,10 @@ private class HomeState {
             stats = Repository.getHomeStats()
             accidents = Repository.getAllAccidents()
             violations = Repository.getAllViolations()
+            analyticsReports = Repository.getAnalyticsReports()
         } catch (e: Exception) {
             error = "Ошибка загрузки данных: ${e.message}"
+            e.printStackTrace()
         } finally {
             isLoading = false
         }

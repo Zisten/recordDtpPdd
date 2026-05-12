@@ -9,10 +9,6 @@ data class Officer(
     val password: String
 )
 
-/**
- * Упрощённая модель водителя для UI.
- * В БД ФИО разнесено на last/first/middle.
- */
 data class Driver(
     val id: Int,
     val fullName: String,
@@ -31,9 +27,6 @@ data class License(
     val issueDate: LocalDate
 )
 
-/**
- * Упрощённая модель ТС для UI.
- */
 data class Vehicle(
     val id: Int,
     val ownerId: Int?,
@@ -51,7 +44,6 @@ data class Vehicle(
 data class AccidentRecord(
     val id: Int,
     val officerId: Int,
-    val typeId: Int?,
     val dateTime: LocalDateTime,
     val street: String,
     val house: String?,
@@ -93,8 +85,15 @@ data class ViolationRecord(
     val driverFullName: String
 )
 
-/** Сводные данные для главного экрана */
 data class HomeStats(
     val accidentsToday: Int,
     val violationsToday: Int
+)
+
+// НОВАЯ МОДЕЛЬ ДЛЯ АНАЛИТИКИ
+data class AnalyticsReport(
+    val category: String,
+    val title: String,
+    val headers: List<String>,
+    val rows: List<List<String>>
 )

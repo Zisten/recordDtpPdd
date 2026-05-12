@@ -13,6 +13,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.course.recorddtppdd.db.Repository
+import org.course.recorddtppdd.model.ViolationType
 import java.time.LocalDate
 import java.time.LocalDateTime
 
@@ -33,16 +34,17 @@ private class ViolationFormState {
     var vehicleBrand by mutableStateOf("")
     var vehicleModel by mutableStateOf("")
     var vehicleOwner by mutableStateOf("")
-    var vehicleSts by mutableStateOf("")
     var vehicleVin by mutableStateOf("")
     var vehicleOwnerAddress by mutableStateOf("")
 
     var violationTypeName by mutableStateOf("")
     var npaPoint by mutableStateOf("")
-    var description by mutableStateOf("")
+    var street by mutableStateOf("")
+    var houseNumber by mutableStateOf("")
     var witnessName by mutableStateOf("")
     var witnessAddress by mutableStateOf("")
     var witnessPhone by mutableStateOf("")
+    var noWitnesses by mutableStateOf(false)
     var violationDate by mutableStateOf(java.time.LocalDate.now().toString())
     var violationTime by mutableStateOf("12:00")
 
@@ -50,21 +52,58 @@ private class ViolationFormState {
     var saveError by mutableStateOf("")
     var saveSuccess by mutableStateOf(false)
 
+    val availableViolationTypes = mutableStateListOf<ViolationType>()
+
+    init {
+        try {
+            availableViolationTypes.addAll(Repository.getAllViolationTypes())
+        } catch (_: Exception) {}
+    }
+
     fun nextStep() { if (currentStep < totalSteps - 1) currentStep++ }
     fun prevStep() { if (currentStep > 0) currentStep-- }
 
-    fun lookupVehicle() {
+    fun lookupDriverByLicense() {
+        if (licSeries.isBlank() || licNumber.isBlank()) return
+        try {
+            val lic = Repository.findLicenseBySeriesAndNumber(licSeries, licNumber)
+            if (lic != null) {
+                val d = Repository.findDriverById(lic.driverId)
+                if (d != null) {
+                    driverFullName = d.fullName
+                    driverBirthdate = d.birthDate?.toString() ?: ""
+                    driverAddress = d.actualAddress ?: d.registrationAddress ?: ""
+                    driverPhone = d.phone ?: ""
+                    licCategory = lic.category ?: ""
+                    licIssueDate = lic.issueDate.toString()
+                }
+            }
+        } catch (_: Exception) {}
+    }
+
+    fun lookupOwnerByPlate() {
         if (vehiclePlate.isBlank()) return
         try {
             val v = Repository.findVehicleByPlate(vehiclePlate)
+            if (v?.ownerId != null) {
+                val owner = Repository.findDriverById(v.ownerId)
+                if (owner != null) {
+                    vehicleOwner = owner.fullName
+                    vehicleOwnerAddress = owner.actualAddress ?: owner.registrationAddress ?: ""
+                }
+            }
+        } catch (_: Exception) {}
+    }
+
+    fun lookupVehicleByVin() {
+        if (vehicleVin.isBlank()) return
+        try {
+            val v = Repository.findVehicleByVin(vehicleVin)
             if (v != null) {
                 vehicleBrand = v.brand
                 vehicleModel = v.model
-                vehicleVin = v.vin ?: ""
-                vehicleSts = v.regCertificate ?: ""
             }
-        } catch (_: Exception) {
-        }
+        } catch (_: Exception) {}
     }
 
     fun save(officerId: Int, onSuccess: () -> Unit) {
@@ -75,14 +114,20 @@ private class ViolationFormState {
                 "${violationDate}T${violationTime.padStart(5, '0')}:00"
             )
 
-            val driverId = Repository.getOrCreateDriver(
+            // Водитель (если найден по ВУ - берем его, иначе создаем)
+            val dLic = if (licSeries.isNotBlank() && licNumber.isNotBlank()) {
+                Repository.findLicenseBySeriesAndNumber(licSeries, licNumber)
+            } else null
+
+            val driverId = dLic?.driverId ?: Repository.getOrCreateDriver(
                 fullName = driverFullName,
                 birthDate = parseDateOrNull(driverBirthdate),
                 registrationAddress = driverAddress.ifBlank { null },
                 actualAddress = driverAddress.ifBlank { null },
                 phone = driverPhone.ifBlank { null }
             )
-            if (licSeries.isNotBlank() && licNumber.isNotBlank()) {
+
+            if (dLic == null && licSeries.isNotBlank() && licNumber.isNotBlank()) {
                 val issueDate = parseDateOrNull(licIssueDate) ?: LocalDate.now()
                 Repository.insertLicense(driverId, licSeries, licNumber, licCategory.ifBlank { null }, issueDate)
             }
@@ -97,7 +142,7 @@ private class ViolationFormState {
                 model = vehicleModel,
                 numberPlate = vehiclePlate,
                 vin = vehicleVin.ifBlank { null },
-                regCertificate = vehicleSts.ifBlank { null },
+                regCertificate = null, // СТС убрали
                 insuranceName = null,
                 insurancePolicy = null,
                 insuranceExpiry = null,
@@ -106,11 +151,11 @@ private class ViolationFormState {
 
             val violationTypeId = Repository.getOrCreateViolationType(
                 clause = npaPoint,
-                description = description,
+                description = violationTypeName,
                 fineAmount = 0
             )
 
-            val witnessInfo = listOfNotNull(witnessName, witnessAddress, witnessPhone)
+            val witnessInfo = if (noWitnesses) null else listOfNotNull(witnessName, witnessAddress, witnessPhone)
                 .filter { it.isNotBlank() }
                 .joinToString(", ")
                 .ifBlank { null }
@@ -121,8 +166,8 @@ private class ViolationFormState {
                 vehicleId = vehicleId,
                 typeId = violationTypeId,
                 dateTime = dt,
-                street = "",
-                houseNumber = null,
+                street = street,
+                houseNumber = houseNumber.ifBlank { null },
                 witnessVictimInfo = witnessInfo
             )
 
@@ -150,15 +195,16 @@ private class ViolationFormState {
         vehicleBrand = ""
         vehicleModel = ""
         vehicleOwner = ""
-        vehicleSts = ""
         vehicleVin = ""
         vehicleOwnerAddress = ""
         violationTypeName = ""
         npaPoint = ""
-        description = ""
+        street = ""
+        houseNumber = ""
         witnessName = ""
         witnessAddress = ""
         witnessPhone = ""
+        noWitnesses = false
         violationDate = java.time.LocalDate.now().toString()
         violationTime = "12:00"
         saveError = ""
@@ -250,21 +296,16 @@ private fun ViolationStepIndicator(current: Int, total: Int) {
     }
 }
 
-// ── Шаг 1: Персональные данные нарушителя + ВУ ──────────────────────────────
-
 @Composable
 private fun VStep1PersonalData(state: ViolationFormState) {
     val scroll = rememberScrollState()
     Column(modifier = Modifier.fillMaxSize().verticalScroll(scroll), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        VSectionTitle("Персональные данные нарушителя")
-        VFormField("ФИО", state.driverFullName) { state.driverFullName = it }
-        VFormField("Дата рождения (гггг-мм-дд)", state.driverBirthdate) { state.driverBirthdate = it }
-        VFormField("Адрес проживания", state.driverAddress) { state.driverAddress = it }
-        VFormField("Телефон", state.driverPhone) { state.driverPhone = it }
-
-        HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
         VSectionTitle("Водительское удостоверение")
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            "Введите серию и номер ВУ и нажмите лупу для автозаполнения.",
+            fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedTextField(
                 value = state.licSeries, onValueChange = { state.licSeries = it },
                 label = { Text("Серия") }, modifier = Modifier.weight(1f), singleLine = true
@@ -273,16 +314,29 @@ private fun VStep1PersonalData(state: ViolationFormState) {
                 value = state.licNumber, onValueChange = { state.licNumber = it },
                 label = { Text("Номер") }, modifier = Modifier.weight(1f), singleLine = true
             )
+            IconButton(onClick = { state.lookupDriverByLicense() }) {
+                Icon(Icons.Default.Search, contentDescription = "Найти ВУ")
+            }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedTextField(
                 value = state.licCategory, onValueChange = { state.licCategory = it },
                 label = { Text("Категория") }, modifier = Modifier.weight(1f), singleLine = true
             )
+            OutlinedTextField(
+                value = state.licIssueDate, onValueChange = { state.licIssueDate = it },
+                label = { Text("Дата выдачи (гггг-мм-дд)") }, modifier = Modifier.weight(1f), singleLine = true
+            )
         }
-        VFormField("Дата выдачи ВУ", state.licIssueDate) { state.licIssueDate = it }
+
+        HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+        VSectionTitle("Персональные данные нарушителя")
+        VFormField("ФИО", state.driverFullName) { state.driverFullName = it }
+        VFormField("Дата рождения (гггг-мм-дд)", state.driverBirthdate) { state.driverBirthdate = it }
+        VFormField("Адрес проживания", state.driverAddress) { state.driverAddress = it }
+        VFormField("Телефон", state.driverPhone) { state.driverPhone = it }
     }
 }
-
-// ── Шаг 2: Данные ТС с автоподстановкой ────────────────────────────────────
 
 @Composable
 private fun VStep2VehicleData(state: ViolationFormState) {
@@ -290,56 +344,101 @@ private fun VStep2VehicleData(state: ViolationFormState) {
     Column(modifier = Modifier.fillMaxSize().verticalScroll(scroll), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         VSectionTitle("Транспортное средство")
         Text(
-            "Введите госномер для автоматической подстановки данных из БД:",
+            "Госномер → Заполняет владельца. VIN → Заполняет марку и модель.",
             fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
         )
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedTextField(
                 value = state.vehiclePlate,
                 onValueChange = { state.vehiclePlate = it },
-                label = { Text("Госномер") },
+                label = { Text("Госномер (Поиск владельца)") },
                 modifier = Modifier.weight(1f),
                 singleLine = true
             )
-            IconButton(onClick = { state.lookupVehicle() }) {
-                Icon(Icons.Default.Search, contentDescription = "Найти ТС")
+            IconButton(onClick = { state.lookupOwnerByPlate() }) {
+                Icon(Icons.Default.Search, contentDescription = "Найти владельца")
+            }
+        }
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedTextField(
+                value = state.vehicleVin,
+                onValueChange = { state.vehicleVin = it },
+                label = { Text("VIN (Поиск авто)") },
+                modifier = Modifier.weight(1f),
+                singleLine = true
+            )
+            IconButton(onClick = { state.lookupVehicleByVin() }) {
+                Icon(Icons.Default.Search, contentDescription = "Найти по VIN")
             }
         }
         VFormField("Марка", state.vehicleBrand) { state.vehicleBrand = it }
         VFormField("Модель", state.vehicleModel) { state.vehicleModel = it }
         VFormField("Владелец (ФИО)", state.vehicleOwner) { state.vehicleOwner = it }
         VFormField("Адрес владельца", state.vehicleOwnerAddress) { state.vehicleOwnerAddress = it }
-        VFormField("VIN", state.vehicleVin) { state.vehicleVin = it }
-        VFormField("СТС", state.vehicleSts) { state.vehicleSts = it }
     }
 }
 
-// ── Шаг 3: Нарушение ─────────────────────────────────────────────────────[...]
-
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun VStep3Violation(state: ViolationFormState) {
     val scroll = rememberScrollState()
     Column(modifier = Modifier.fillMaxSize().verticalScroll(scroll), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         VSectionTitle("Данные нарушения")
+
+        var expanded by remember { mutableStateOf(false) }
+
+        ExposedDropdownMenuBox(
+            expanded = expanded,
+            onExpandedChange = { expanded = it }
+        ) {
+            OutlinedTextField(
+                value = state.npaPoint,
+                onValueChange = {},
+                readOnly = true,
+                label = { Text("Пункт НПА") },
+                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+                colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
+                modifier = Modifier.menuAnchor().fillMaxWidth(),
+                singleLine = true
+            )
+            ExposedDropdownMenu(
+                expanded = expanded && state.availableViolationTypes.isNotEmpty(),
+                onDismissRequest = { expanded = false }
+            ) {
+                state.availableViolationTypes.forEach { vt ->
+                    DropdownMenuItem(
+                        text = { Text("${vt.clause} - ${vt.description}") },
+                        onClick = {
+                            state.npaPoint = vt.clause
+                            state.violationTypeName = vt.description
+                            expanded = false
+                        }
+                    )
+                }
+            }
+        }
+
         VFormField("Вид нарушения (наименование)", state.violationTypeName) { state.violationTypeName = it }
-        VFormField("Пункт НПА", state.npaPoint) { state.npaPoint = it }
-        OutlinedTextField(
-            value = state.description, onValueChange = { state.description = it },
-            label = { Text("Суть нарушения") },
-            modifier = Modifier.fillMaxWidth().height(120.dp)
-        )
+
+        VFormField("Улица", state.street) { state.street = it }
+        VFormField("Номер дома", state.houseNumber) { state.houseNumber = it }
+
         VFormField("Дата нарушения (гггг-мм-дд)", state.violationDate) { state.violationDate = it }
         VFormField("Время нарушения (чч:мм)", state.violationTime) { state.violationTime = it }
 
         HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
         VSectionTitle("Свидетель / Потерпевший")
-        VFormField("ФИО", state.witnessName) { state.witnessName = it }
-        VFormField("Адрес", state.witnessAddress) { state.witnessAddress = it }
-        VFormField("Телефон", state.witnessPhone) { state.witnessPhone = it }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Checkbox(checked = state.noWitnesses, onCheckedChange = { state.noWitnesses = it })
+            Text("Свидетели отсутствуют")
+        }
+        if (!state.noWitnesses) {
+            VFormField("ФИО", state.witnessName) { state.witnessName = it }
+            VFormField("Адрес", state.witnessAddress) { state.witnessAddress = it }
+            VFormField("Телефон", state.witnessPhone) { state.witnessPhone = it }
+        }
     }
 }
-
-// ── Вспомогательные ─────────────────────────────────────────────────────[...]
 
 @Composable
 private fun VSectionTitle(text: String) {
