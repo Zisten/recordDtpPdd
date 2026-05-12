@@ -1,16 +1,14 @@
 package org.course.recorddtppdd.db
 
 import org.course.recorddtppdd.config.AppConfig
+import org.flywaydb.core.Flyway
 import org.jetbrains.exposed.sql.Database
 
 /**
  * Фабрика подключения к базе данных.
  *
- * ВАЖНО:
- *  - В этом проекте схема БД создаётся/мигрируется SQL-скриптом (см. /sql в репозитории).
- *  - Поэтому мы НЕ вызываем SchemaUtils.create* для MySQL, иначе Exposed попытается
- *    "досоздать" таблицы/колонки по Tables.kt и может привести к конфликтам
- *    (в т.ч. ошибке вида: "Incorrect table definition; there can be only one auto column...").
+ * Схема создаётся через Flyway (скрипт в resources/db/migration).
+ * Поэтому мы НЕ вызываем SchemaUtils.create* для MySQL.
  */
 object DatabaseFactory {
 
@@ -18,6 +16,13 @@ object DatabaseFactory {
 
     fun init() {
         if (initialized) return
+
+        val flyway = Flyway.configure()
+            .dataSource(AppConfig.DB_URL, AppConfig.DB_USER, AppConfig.DB_PASSWORD)
+            .locations("classpath:db/migration")
+            .baselineOnMigrate(true)
+            .load()
+        flyway.migrate()
 
         Database.connect(
             url = AppConfig.DB_URL,
