@@ -3,18 +3,21 @@ package org.course.recorddtppdd.db
 import org.course.recorddtppdd.model.*
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
+import org.jetbrains.exposed.sql.transactions.TransactionManager
 import org.jetbrains.exposed.sql.transactions.transaction
+import java.sql.Date
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.util.regex.Pattern
 
 /**
- * Репозиторий — операции с БД через Exposed DSL.
- * Привязан к вашей реальной схеме MySQL.
+ * Репозиторий — операции с БД через Exposed DSL + raw SQL для продвинутых отчетов.
  */
 object Repository {
 
-    // ── Officers ───────────────────────────────────────────────────────────[...]
+    private var sqlArtifactsEnsured = false
+
+    // ── Officers ───────────────────────────────────────────────────────────────
 
     fun findOfficerByCredentials(login: String, password: String): Officer? = transaction {
         Officers
@@ -30,27 +33,23 @@ object Repository {
         password = row[Officers.password]
     )
 
-    // ── Drivers ───────────────────────────────────────────────────────────[...]
+    // ── Drivers ────────────────────────────────────────────────────────────────
 
     fun getAllDrivers(): List<Driver> = transaction {
         Drivers.selectAll().map { toDriver(it) }
     }
 
-    /** Очень простой поиск (ФИО + телефон). */
     fun findDriverByNameAndPhone(fullName: String, phone: String?): Driver? = transaction {
         val (ln, fn, mn) = splitFullName(fullName)
-
         val base = (Drivers.lastName eq ln) and (Drivers.firstName eq fn) and (Drivers.phone eq phone)
 
-        // В некоторых версиях Exposed нет extension isNull(), поэтому используем eq null.
         val middleExpr: Op<Boolean> = if (mn == null) {
             Drivers.middleName eq null
         } else {
             Drivers.middleName eq mn
         }
 
-        Drivers
-            .selectAll()
+        Drivers.selectAll()
             .where { base and middleExpr }
             .map { toDriver(it) }
             .firstOrNull()
@@ -99,7 +98,7 @@ object Repository {
         )
     }
 
-    // ── Licenses ───────────────────────────────────────────────────────────[...]
+    // ── Licenses ───────────────────────────────────────────────────────────────
 
     fun insertLicense(
         driverId: Int,
@@ -133,7 +132,7 @@ object Repository {
         issueDate = row[Licenses.issueDate]
     )
 
-    // ── Vehicles ───────────────────────────────────────────────────────────[...]
+    // ── Vehicles ───────────────────────────────────────────────────────────────
 
     fun getAllVehicles(): List<Vehicle> = transaction {
         Vehicles.selectAll().map { toVehicle(it) }
@@ -213,7 +212,21 @@ object Repository {
         hasHullInsurance = row[Vehicles.hasHullInsurance]
     )
 
-    // ── AccidentsRecords ─────────────────────────────────────────────────────
+    // ── AccidentTypes ──────────────────────────────────────────────────────────
+
+    fun getAllAccidentTypes(): List<AccidentType> = transaction {
+        AccidentTypes.selectAll()
+            .orderBy(AccidentTypes.id, SortOrder.ASC)
+            .map {
+                AccidentType(
+                    id = it[AccidentTypes.id],
+                    name = it[AccidentTypes.name],
+                    description = it[AccidentTypes.description]
+                )
+            }
+    }
+
+    // ── AccidentsRecords ───────────────────────────────────────────────────────
 
     fun getAllAccidents(): List<AccidentRecord> = transaction {
         AccidentsRecords.selectAll()
@@ -263,8 +276,7 @@ object Repository {
         )
     }
 
-
-    // ── AccidentParticipants ────────────────────────────────────────────────
+    // ── AccidentParticipants ──────────────────────────────────────────────────
 
     fun insertParticipant(
         accidentId: Int,
@@ -286,10 +298,18 @@ object Repository {
         }
     }
 
-    // ── ViolationsTypes ─────────────────────────────────────────────────────
+    // ── ViolationsTypes ───────────────────────────────────────────────────────
 
     fun getAllViolationTypes(): List<ViolationType> = transaction {
-        ViolationsTypes.selectAll().map { toViolationType(it) }
+        ViolationsTypes.selectAll()
+            .orderBy(ViolationsTypes.clause, SortOrder.ASC)
+            .map { toViolationType(it) }
+    }
+
+    fun findViolationTypeById(id: Int): ViolationType? = transaction {
+        ViolationsTypes.selectAll().where { ViolationsTypes.id eq id }
+            .map { toViolationType(it) }
+            .firstOrNull()
     }
 
     fun getOrCreateViolationType(clause: String, description: String, fineAmount: Int): Int = transaction {
@@ -312,7 +332,7 @@ object Repository {
         fineAmount = row[ViolationsTypes.fineAmount]
     )
 
-    // ── ViolationRecords ────────────────────────────────────────────────────
+    // ── ViolationRecords ──────────────────────────────────────────────────────
 
     fun getAllViolations(): List<ViolationRecord> = transaction {
         (ViolationRecords innerJoin Drivers innerJoin ViolationsTypes)
@@ -357,19 +377,250 @@ object Repository {
         driverFullName = buildFullName(row[Drivers.lastName], row[Drivers.firstName], row[Drivers.middleName])
     )
 
-    // ── Stats ────────────────────────────────────────────────────────────[...]
+    // ── Stats + SQL analytics ────────────────────────────────────────────────
 
     fun getHomeStats(): HomeStats {
-        val today = java.time.LocalDate.now()
+        val today = LocalDate.now()
         val accidents = getAllAccidents().count { it.dateTime.toLocalDate() == today }
         val violations = getAllViolations().count { it.dateTime.toLocalDate() == today }
         return HomeStats(accidents, violations)
     }
 
-    // ── Helpers ───────────────────────────────────────────────────────────[...]
+    fun ensureSqlArtifacts() {
+        if (sqlArtifactsEnsured) return
+        transaction {
+            val statements = listOf(
+                """
+                CREATE TABLE IF NOT EXISTS AuditLog (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    entity VARCHAR(64) NOT NULL,
+                    entity_id INT NOT NULL,
+                    action VARCHAR(32) NOT NULL,
+                    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )
+                """.trimIndent(),
+                """
+                CREATE VIEW IF NOT EXISTS v_accidents_summary AS
+                SELECT
+                    a.accident_id,
+                    a.date_time,
+                    a.street,
+                    a.house,
+                    o.login AS officer_login,
+                    (SELECT COUNT(*) FROM AccidentParticipants ap WHERE ap.accident_id = a.accident_id) AS participants_count
+                FROM AccidentsRecords a
+                JOIN Officers o ON o.officer_id = a.officer_id
+                """.trimIndent(),
+                """
+                CREATE VIEW IF NOT EXISTS v_violations_summary AS
+                SELECT
+                    vr.record_id,
+                    vr.date_time,
+                    vr.street,
+                    vr.house_number,
+                    CONCAT(d.last_name, ' ', d.first_name) AS driver_name,
+                    vt.clause,
+                    vt.description,
+                    o.login AS officer_login
+                FROM ViolationRecords vr
+                JOIN Drivers d ON d.driver_id = vr.driver_id
+                JOIN ViolationsTypes vt ON vt.type_id = vr.type_id
+                JOIN Officers o ON o.officer_id = vr.officer_id
+                """.trimIndent(),
+                "DROP TRIGGER IF EXISTS trg_accident_before_insert",
+                """
+                CREATE TRIGGER trg_accident_before_insert
+                BEFORE INSERT ON AccidentsRecords
+                FOR EACH ROW
+                BEGIN
+                    SET NEW.street = TRIM(NEW.street);
+                END
+                """.trimIndent(),
+                "DROP TRIGGER IF EXISTS trg_accident_after_insert",
+                """
+                CREATE TRIGGER trg_accident_after_insert
+                AFTER INSERT ON AccidentsRecords
+                FOR EACH ROW
+                BEGIN
+                    INSERT INTO AuditLog(entity, entity_id, action)
+                    VALUES ('AccidentsRecords', NEW.accident_id, 'INSERT');
+                END
+                """.trimIndent(),
+                "DROP TRIGGER IF EXISTS trg_violation_after_insert",
+                """
+                CREATE TRIGGER trg_violation_after_insert
+                AFTER INSERT ON ViolationRecords
+                FOR EACH ROW
+                BEGIN
+                    INSERT INTO AuditLog(entity, entity_id, action)
+                    VALUES ('ViolationRecords', NEW.record_id, 'INSERT');
+                END
+                """.trimIndent(),
+                "DROP PROCEDURE IF EXISTS sp_daily_stats",
+                """
+                CREATE PROCEDURE sp_daily_stats(IN p_date DATE)
+                BEGIN
+                    SELECT
+                        (SELECT COUNT(*) FROM AccidentsRecords a WHERE DATE(a.date_time) = p_date) AS accidents_count,
+                        (SELECT COUNT(*) FROM ViolationRecords v WHERE DATE(v.date_time) = p_date) AS violations_count;
+                END
+                """.trimIndent(),
+                "DROP PROCEDURE IF EXISTS sp_accident_participants",
+                """
+                CREATE PROCEDURE sp_accident_participants(IN p_accident_id INT)
+                BEGIN
+                    SELECT ap.role, d.last_name, d.first_name, v.number_plate
+                    FROM AccidentParticipants ap
+                    JOIN Drivers d ON d.driver_id = ap.driver_id
+                    JOIN Vehicles v ON v.vehicle_id = ap.vehicle_id
+                    WHERE ap.accident_id = p_accident_id;
+                END
+                """.trimIndent(),
+                "DROP FUNCTION IF EXISTS fn_driver_violation_count",
+                """
+                CREATE FUNCTION fn_driver_violation_count(p_driver_id INT)
+                RETURNS INT
+                DETERMINISTIC
+                BEGIN
+                    DECLARE v_count INT;
+                    SELECT COUNT(*) INTO v_count
+                    FROM ViolationRecords
+                    WHERE driver_id = p_driver_id;
+                    RETURN v_count;
+                END
+                """.trimIndent()
+            )
+
+            statements.forEach { sql ->
+                runCatching { execRaw(sql) }
+            }
+        }
+        sqlArtifactsEnsured = true
+    }
+
+    fun getAnalyticsRows(): List<AnalyticsRow> {
+        ensureSqlArtifacts()
+        return transaction {
+            val result = mutableListOf<AnalyticsRow>()
+
+            execQuery(
+                """
+                WITH ranked AS (
+                    SELECT officer_login, participants_count, date_time
+                    FROM v_accidents_summary
+                )
+                SELECT
+                    officer_login,
+                    participants_count,
+                    ROW_NUMBER() OVER (ORDER BY participants_count DESC, date_time DESC) AS rn
+                FROM ranked
+                ORDER BY rn
+                LIMIT 5
+                """.trimIndent()
+            ) { rs ->
+                result += AnalyticsRow(
+                    category = "CTE/Window: ДТП по участникам",
+                    value1 = rs.getString("officer_login") ?: "-",
+                    value2 = (rs.getInt("participants_count")).toString(),
+                    value3 = "#${rs.getInt("rn")}"
+                )
+            }
+
+            execQuery(
+                """
+                WITH daily AS (
+                    SELECT DATE(date_time) AS d, COUNT(*) AS c
+                    FROM AccidentsRecords
+                    GROUP BY DATE(date_time)
+                )
+                SELECT
+                    d,
+                    c,
+                    SUM(c) OVER (ORDER BY d) AS running_total,
+                    RANK() OVER (ORDER BY c DESC) AS rk
+                FROM daily
+                ORDER BY d DESC
+                LIMIT 5
+                """.trimIndent()
+            ) { rs ->
+                result += AnalyticsRow(
+                    category = "CTE/Window: динамика ДТП",
+                    value1 = rs.getString("d") ?: "-",
+                    value2 = rs.getInt("c").toString(),
+                    value3 = "Σ${rs.getInt("running_total")} / R${rs.getInt("rk")}"
+                )
+            }
+
+            execQuery(
+                """
+                WITH per_day AS (
+                    SELECT DATE(date_time) AS d, COUNT(*) AS c
+                    FROM ViolationRecords
+                    GROUP BY DATE(date_time)
+                )
+                SELECT
+                    d,
+                    c,
+                    LAG(c, 1, 0) OVER (ORDER BY d) AS prev_c
+                FROM per_day
+                ORDER BY d DESC
+                LIMIT 5
+                """.trimIndent()
+            ) { rs ->
+                result += AnalyticsRow(
+                    category = "CTE/Window: динамика ПДД",
+                    value1 = rs.getString("d") ?: "-",
+                    value2 = rs.getInt("c").toString(),
+                    value3 = "prev=${rs.getInt("prev_c")}"
+                )
+            }
+
+            execCallable(
+                sql = "{ call sp_daily_stats(?) }",
+                binder = { it.setDate(1, Date.valueOf(LocalDate.now())) }
+            ) { rs ->
+                result += AnalyticsRow(
+                    category = "Procedure: stats",
+                    value1 = "today",
+                    value2 = "ДТП=${rs.getInt("accidents_count")}",
+                    value3 = "ПДД=${rs.getInt("violations_count")}"
+                )
+            }
+
+            execQuery(
+                """
+                SELECT d.driver_id, CONCAT(d.last_name, ' ', d.first_name) AS driver_name,
+                       fn_driver_violation_count(d.driver_id) AS v_count
+                FROM Drivers d
+                WHERE d.driver_id IN (
+                    SELECT vr.driver_id
+                    FROM ViolationRecords vr
+                    GROUP BY vr.driver_id
+                    HAVING COUNT(*) > 0
+                )
+                ORDER BY v_count DESC
+                LIMIT 5
+                """.trimIndent()
+            ) { rs ->
+                result += AnalyticsRow(
+                    category = "Function/Subquery: водитель",
+                    value1 = rs.getString("driver_name") ?: "-",
+                    value2 = rs.getInt("v_count").toString(),
+                    value3 = "id=${rs.getInt("driver_id")}"
+                )
+            }
+
+            if (result.isEmpty()) {
+                result += AnalyticsRow("SQL", "Нет данных", "-", "-")
+            }
+            result
+        }
+    }
+
+    // ── Helpers ───────────────────────────────────────────────────────────────
 
     private fun splitFullName(fullName: String): Triple<String, String, String?> {
-        val parts = fullName.trim().split(Regex("\\s+"))
+        val parts = fullName.trim().split(Regex("\\s+")).filter { it.isNotBlank() }
         val ln = parts.getOrElse(0) { "" }
         val fn = parts.getOrElse(1) { "" }
         val mn = parts.getOrNull(2)
@@ -378,5 +629,35 @@ object Repository {
 
     private fun buildFullName(last: String, first: String, middle: String?): String {
         return listOfNotNull(last, first, middle?.takeIf { it.isNotBlank() }).joinToString(" ")
+    }
+
+    private fun execRaw(sql: String) {
+        val conn = TransactionManager.current().connection.jdbcConnection
+        conn.createStatement().use { st -> st.execute(sql) }
+    }
+
+    private fun execQuery(sql: String, row: (java.sql.ResultSet) -> Unit) {
+        val conn = TransactionManager.current().connection.jdbcConnection
+        conn.prepareStatement(sql).use { ps ->
+            ps.executeQuery().use { rs ->
+                while (rs.next()) row(rs)
+            }
+        }
+    }
+
+    private fun execCallable(
+        sql: String,
+        binder: (java.sql.CallableStatement) -> Unit,
+        row: (java.sql.ResultSet) -> Unit
+    ) {
+        val conn = TransactionManager.current().connection.jdbcConnection
+        conn.prepareCall(sql).use { cs ->
+            binder(cs)
+            if (cs.execute()) {
+                cs.resultSet?.use { rs ->
+                    while (rs.next()) row(rs)
+                }
+            }
+        }
     }
 }
