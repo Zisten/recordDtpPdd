@@ -9,7 +9,7 @@ import org.jetbrains.exposed.sql.transactions.transaction
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.util.regex.Pattern
-
+import org.jetbrains.exposed.sql.statements.StatementType
 object Repository {
 
     // ── Officers ───────────────────────────────────────────────────────────
@@ -402,12 +402,18 @@ object Repository {
 
     // ── SQL Analytics ─────────────────────────────────────────────────────
 
+    // ── SQL Analytics ─────────────────────────────────────────────────────
+
     fun getAnalyticsReports(): List<AnalyticsReport> = transaction {
         val reports = mutableListOf<AnalyticsReport>()
 
         fun execQuery(cat: String, name: String, cols: List<String>, sql: String) {
             val rows = mutableListOf<List<String>>()
-            TransactionManager.current().exec(sql) { rs ->
+            TransactionManager.current().exec(
+                stmt = sql,
+                args = emptyList(),
+                explicitStatementType = StatementType.SELECT
+            ) { rs ->
                 while (rs.next()) {
                     val row = mutableListOf<String>()
                     for (i in 1..cols.size) {
@@ -419,10 +425,10 @@ object Repository {
             reports.add(AnalyticsReport(cat, name, cols, rows))
         }
 
-        // --- 1. ПОДЗАПРОСЫ (2) ---
+        // --- Категория: Финансовый контроль ---
         execQuery(
-            "Подзапросы", "Водители со штрафами выше среднего",
-            listOf("Фамилия", "Имя", "Сумма штрафов"),
+            "Финансовый контроль", "Водители с превышением среднего показателя штрафов",
+            listOf("Фамилия", "Имя", "Сумма штрафов (руб.)"),
             """
             SELECT d.last_name, d.first_name, SUM(vt.fine_amount) as total
             FROM Drivers d
@@ -441,70 +447,8 @@ object Repository {
         )
 
         execQuery(
-            "Подзапросы", "ТС, участвовавшие в ДТП более 1 раза",
-            listOf("Марка", "Модель", "Госномер"),
-            """
-            SELECT brand, model, number_plate FROM Vehicles 
-            WHERE vehicle_id IN (
-                SELECT vehicle_id FROM AccidentParticipants GROUP BY vehicle_id HAVING COUNT(*) > 1
-            )
-            """
-        )
-
-        // --- 2. JOIN-ЗАПРОСЫ (3) ---
-        execQuery(
-            "JOIN-запросы", "Офицеры и оформленные ими ДТП (LEFT JOIN)",
-            listOf("Офицер", "Оформлено ДТП"),
-            """
-            SELECT o.last_name, COUNT(a.accident_id) as accidents_count
-            FROM Officers o
-            LEFT JOIN AccidentsRecords a ON o.officer_id = a.officer_id
-            GROUP BY o.officer_id, o.last_name
-            """
-        )
-
-        execQuery(
-            "JOIN-запросы", "Полная цепочка: Нарушение -> Водитель -> ТС",
-            listOf("Дата", "Пункт НПА", "Водитель", "Госномер ТС"),
-            """
-            SELECT DATE(vr.date_time), vt.clause, d.last_name, v.number_plate
-            FROM ViolationRecords vr
-            JOIN ViolationsTypes vt ON vr.type_id = vt.type_id
-            JOIN Drivers d ON vr.driver_id = d.driver_id
-            JOIN Vehicles v ON vr.vehicle_id = v.vehicle_id
-            LIMIT 20
-            """
-        )
-
-        execQuery(
-            "JOIN-запросы", "Участники ДТП",
-            listOf("Дата ДТП", "Улица", "Водитель", "Роль"),
-            """
-            SELECT DATE(a.date_time), a.street, d.last_name, p.role
-            FROM AccidentParticipants p
-            JOIN AccidentsRecords a ON p.accident_id = a.accident_id
-            JOIN Drivers d ON p.driver_id = d.driver_id
-            ORDER BY a.date_time DESC LIMIT 20
-            """
-        )
-
-        // --- 3. CTE - Common Table Expressions (3) ---
-        execQuery(
-            "CTE (WITH)", "Анализ аварийности по месяцам",
-            listOf("Месяц", "Кол-во ДТП"),
-            """
-            WITH MonthlyStats AS (
-                SELECT DATE_FORMAT(date_time, '%Y-%m') as month, COUNT(*) as cnt
-                FROM AccidentsRecords
-                GROUP BY month
-            )
-            SELECT * FROM MonthlyStats ORDER BY month DESC
-            """
-        )
-
-        execQuery(
-            "CTE (WITH)", "Разбивка штрафов по категориям",
-            listOf("Категория", "Количество"),
+            "Финансовый контроль", "Классификация выписанных штрафов по размеру",
+            listOf("Категория тяжести", "Количество постановлений"),
             """
             WITH FineCategories AS (
                 SELECT CASE 
@@ -518,22 +462,8 @@ object Repository {
         )
 
         execQuery(
-            "CTE (WITH)", "Топ-3 частых нарушений",
-            listOf("Пункт", "Описание", "Раз"),
-            """
-            WITH ViolationCounts AS (
-                SELECT type_id, COUNT(*) as cnt FROM ViolationRecords GROUP BY type_id
-            )
-            SELECT vt.clause, SUBSTRING(vt.description, 1, 30), vc.cnt
-            FROM ViolationCounts vc JOIN ViolationsTypes vt ON vc.type_id = vt.type_id
-            ORDER BY vc.cnt DESC LIMIT 3
-            """
-        )
-
-        // --- 4. ОКОННЫЕ ФУНКЦИИ (4) ---
-        execQuery(
-            "Оконные функции", "Ранжирование водителей по сумме штрафов (DENSE_RANK)",
-            listOf("Водитель", "Сумма штрафов", "Ранг"),
+            "Финансовый контроль", "Рейтинг злостных нарушителей (по сумме штрафов)",
+            listOf("Водитель", "Общая сумма штрафов", "Ранг"),
             """
             SELECT d.last_name, SUM(vt.fine_amount) as total_fine,
                    DENSE_RANK() OVER (ORDER BY SUM(vt.fine_amount) DESC) as rnk
@@ -545,18 +475,8 @@ object Repository {
         )
 
         execQuery(
-            "Оконные функции", "Нумерация нарушений каждого водителя (ROW_NUMBER)",
-            listOf("Водитель", "Дата нарушения", "Порядковый номер"),
-            """
-            SELECT d.last_name, DATE(vr.date_time),
-                   ROW_NUMBER() OVER (PARTITION BY vr.driver_id ORDER BY vr.date_time) as incident_num
-            FROM ViolationRecords vr JOIN Drivers d ON vr.driver_id = d.driver_id
-            """
-        )
-
-        execQuery(
-            "Оконные функции", "Накопительный итог штрафов по дням (SUM OVER)",
-            listOf("Дата", "За день", "Накопительный итог"),
+            "Финансовый контроль", "Динамика начисления штрафов (накопительный итог)",
+            listOf("Дата", "Сумма за день", "Накопительный итог"),
             """
             WITH DailySums AS (
                 SELECT DATE(vr.date_time) as dt, SUM(vt.fine_amount) as daily_sum
@@ -569,9 +489,80 @@ object Repository {
             """
         )
 
+        // --- Категория: Статистика ДТП ---
         execQuery(
-            "Оконные функции", "Дней с предыдущего нарушения (LAG)",
-            listOf("Водитель", "Дата", "Дней прошло"),
+            "Статистика ДТП", "Анализ аварийности по месяцам",
+            listOf("Месяц", "Зафиксировано ДТП"),
+            """
+            WITH MonthlyStats AS (
+                SELECT DATE_FORMAT(date_time, '%Y-%m') as month, COUNT(*) as cnt
+                FROM AccidentsRecords
+                GROUP BY month
+            )
+            SELECT * FROM MonthlyStats ORDER BY month DESC
+            """
+        )
+
+        execQuery(
+            "Статистика ДТП", "Регулярные участники ДТП (Транспортные средства)",
+            listOf("Марка", "Модель", "Госномер"),
+            """
+            SELECT brand, model, number_plate FROM Vehicles 
+            WHERE vehicle_id IN (
+                SELECT vehicle_id FROM AccidentParticipants GROUP BY vehicle_id HAVING COUNT(*) > 1
+            )
+            """
+        )
+
+        execQuery(
+            "Статистика ДТП", "Журнал участников недавних ДТП",
+            listOf("Дата ДТП", "Улица", "Водитель", "Роль в ДТП"),
+            """
+            SELECT DATE(a.date_time), a.street, d.last_name, p.role
+            FROM AccidentParticipants p
+            JOIN AccidentsRecords a ON p.accident_id = a.accident_id
+            JOIN Drivers d ON p.driver_id = d.driver_id
+            ORDER BY a.date_time DESC LIMIT 20
+            """
+        )
+
+        execQuery(
+            "Статистика ДТП", "Расширенная сводка по ДТП (Представление)",
+            listOf("ID ДТП", "Дата", "Улица", "Оформляющий инспектор", "Участников"),
+            "SELECT * FROM View_AccidentFullDetails ORDER BY date_time DESC LIMIT 20"
+        )
+
+        // --- Категория: Анализ нарушений ПДД ---
+        execQuery(
+            "Анализ нарушений ПДД", "Рейтинг наиболее частых нарушений",
+            listOf("Пункт НПА", "Краткое описание", "Зафиксировано раз"),
+            """
+            WITH ViolationCounts AS (
+                SELECT type_id, COUNT(*) as cnt FROM ViolationRecords GROUP BY type_id
+            )
+            SELECT vt.clause, SUBSTRING(vt.description, 1, 30), vc.cnt
+            FROM ViolationCounts vc JOIN ViolationsTypes vt ON vc.type_id = vt.type_id
+            ORDER BY vc.cnt DESC LIMIT 3
+            """
+        )
+
+        execQuery(
+            "Анализ нарушений ПДД", "Детализированный реестр последних нарушений",
+            listOf("Дата", "Пункт НПА", "Фамилия нарушителя", "Госномер ТС"),
+            """
+            SELECT DATE(vr.date_time), vt.clause, d.last_name, v.number_plate
+            FROM ViolationRecords vr
+            JOIN ViolationsTypes vt ON vr.type_id = vt.type_id
+            JOIN Drivers d ON vr.driver_id = d.driver_id
+            JOIN Vehicles v ON vr.vehicle_id = v.vehicle_id
+            ORDER BY vr.date_time DESC
+            LIMIT 20
+            """
+        )
+
+        execQuery(
+            "Анализ нарушений ПДД", "Интервалы между нарушениями (рецидивы)",
+            listOf("Водитель", "Дата нарушения", "Дней с предыдущего"),
             """
             SELECT d.last_name, DATE(vr.date_time),
                    COALESCE(DATEDIFF(vr.date_time, LAG(vr.date_time) OVER (PARTITION BY vr.driver_id ORDER BY vr.date_time)), 0) as days_since_last
@@ -579,17 +570,33 @@ object Repository {
             """
         )
 
-        // --- 5. ПРЕДСТАВЛЕНИЯ / VIEWS (2) ---
+        // --- Категория: Показатели сотрудников ---
         execQuery(
-            "Представления (Views)", "View_DriverRiskProfile (Профиль риска)",
-            listOf("ID", "Водитель", "Нарушений", "Сумма штрафов"),
+            "Показатели сотрудников", "Сводка по оформленным материалам (ДТП)",
+            listOf("Инспектор (Фамилия)", "Оформлено ДТП"),
+            """
+            SELECT o.last_name, COUNT(a.accident_id) as accidents_count
+            FROM Officers o
+            LEFT JOIN AccidentsRecords a ON o.officer_id = a.officer_id
+            GROUP BY o.officer_id, o.last_name
+            """
+        )
+
+        // --- Категория: Профилирование водителей ---
+        execQuery(
+            "Профилирование водителей", "Профили риска водителей (Сводный отчет)",
+            listOf("ID", "ФИО Водителя", "Всего нарушений", "Сумма долга"),
             "SELECT * FROM View_DriverRiskProfile ORDER BY total_fines DESC LIMIT 20"
         )
 
         execQuery(
-            "Представления (Views)", "View_AccidentFullDetails (ДТП детали)",
-            listOf("ID ДТП", "Дата", "Улица", "Офицер", "Участников"),
-            "SELECT * FROM View_AccidentFullDetails ORDER BY date_time DESC LIMIT 20"
+            "Профилирование водителей", "Хронология нарушений по водителям",
+            listOf("Водитель", "Дата нарушения", "Порядковый номер нарушения"),
+            """
+            SELECT d.last_name, DATE(vr.date_time),
+                   ROW_NUMBER() OVER (PARTITION BY vr.driver_id ORDER BY vr.date_time) as incident_num
+            FROM ViolationRecords vr JOIN Drivers d ON vr.driver_id = d.driver_id
+            """
         )
 
         reports
