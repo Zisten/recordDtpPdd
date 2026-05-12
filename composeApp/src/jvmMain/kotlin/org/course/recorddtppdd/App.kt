@@ -11,7 +11,6 @@ import org.course.recorddtppdd.model.Officer
 import org.course.recorddtppdd.ui.screens.AuthScreen
 import org.course.recorddtppdd.ui.screens.MainScreen
 import org.course.recorddtppdd.ui.theme.AppTheme
-import org.course.recorddtppdd.viewmodel.AuthViewModel
 
 /**
  * Корневой composable приложения.
@@ -20,7 +19,6 @@ import org.course.recorddtppdd.viewmodel.AuthViewModel
 @Composable
 fun App() {
     var currentOfficer by remember { mutableStateOf<Officer?>(null) }
-    val authVm = remember { AuthViewModel() }
 
     // Инициализируем БД один раз при старте
     var dbError by remember { mutableStateOf("") }
@@ -36,10 +34,8 @@ fun App() {
         when {
             dbError.isNotBlank() -> DbErrorScreen(dbError)
             currentOfficer == null -> AuthScreen(
-                vm = authVm,
                 onLoginSuccess = { officer ->
                     currentOfficer = officer
-                    authVm.reset()
                 }
             )
             else -> MainScreen(

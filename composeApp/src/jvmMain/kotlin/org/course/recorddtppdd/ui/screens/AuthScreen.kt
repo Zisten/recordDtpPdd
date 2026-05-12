@@ -7,6 +7,7 @@ import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -14,14 +15,15 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import org.course.recorddtppdd.db.Repository
 import org.course.recorddtppdd.model.Officer
-import org.course.recorddtppdd.viewmodel.AuthViewModel
 
 @Composable
-fun AuthScreen(
-    vm: AuthViewModel,
-    onLoginSuccess: (Officer) -> Unit
-) {
+fun AuthScreen(onLoginSuccess: (Officer) -> Unit) {
+    val state = remember { AuthState() }
     Box(
         modifier = Modifier.fillMaxSize(),
         contentAlignment = Alignment.Center
@@ -58,8 +60,8 @@ fun AuthScreen(
 
                 // Поле логина
                 OutlinedTextField(
-                    value = vm.login,
-                    onValueChange = { vm.login = it },
+                    value = state.login,
+                    onValueChange = { state.login = it },
                     label = { Text("Логин") },
                     leadingIcon = { Icon(Icons.Default.Person, contentDescription = null) },
                     modifier = Modifier.fillMaxWidth(),
@@ -68,8 +70,8 @@ fun AuthScreen(
 
                 // Поле пароля
                 OutlinedTextField(
-                    value = vm.password,
-                    onValueChange = { vm.password = it },
+                    value = state.password,
+                    onValueChange = { state.password = it },
                     label = { Text("Пароль") },
                     leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null) },
                     visualTransformation = PasswordVisualTransformation(),
@@ -79,9 +81,9 @@ fun AuthScreen(
                 )
 
                 // Сообщение об ошибке
-                if (vm.error.isNotBlank()) {
+                if (state.error.isNotBlank()) {
                     Text(
-                        text = vm.error,
+                        text = state.error,
                         color = MaterialTheme.colorScheme.error,
                         fontSize = 13.sp
                     )
@@ -90,13 +92,16 @@ fun AuthScreen(
                 // Кнопка входа
                 Button(
                     onClick = {
-                        val officer = vm.authenticate()
-                        if (officer != null) onLoginSuccess(officer)
+                        val officer = state.authenticate()
+                        if (officer != null) {
+                            onLoginSuccess(officer)
+                            state.reset()
+                        }
                     },
                     modifier = Modifier.fillMaxWidth().height(48.dp),
-                    enabled = !vm.isLoading
+                    enabled = !state.isLoading
                 ) {
-                    if (vm.isLoading) {
+                    if (state.isLoading) {
                         CircularProgressIndicator(
                             modifier = Modifier.size(20.dp),
                             color = MaterialTheme.colorScheme.onPrimary,
@@ -108,5 +113,39 @@ fun AuthScreen(
                 }
             }
         }
+    }
+}
+
+private class AuthState {
+    var login by mutableStateOf("")
+    var password by mutableStateOf("")
+    var error by mutableStateOf("")
+    var isLoading by mutableStateOf(false)
+
+    fun authenticate(): Officer? {
+        if (login.isBlank() || password.isBlank()) {
+            error = "Введите логин и пароль"
+            return null
+        }
+        isLoading = true
+        error = ""
+        return try {
+            val officer = Repository.findOfficerByCredentials(login, password)
+            if (officer == null) {
+                error = "Неверный логин или пароль"
+            }
+            officer
+        } catch (e: Exception) {
+            error = "Ошибка подключения к БД: ${e.message}"
+            null
+        } finally {
+            isLoading = false
+        }
+    }
+
+    fun reset() {
+        login = ""
+        password = ""
+        error = ""
     }
 }

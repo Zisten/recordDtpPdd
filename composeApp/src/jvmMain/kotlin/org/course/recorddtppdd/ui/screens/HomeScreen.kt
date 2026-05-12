@@ -14,17 +14,23 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import org.course.recorddtppdd.db.Repository
 import org.course.recorddtppdd.model.AccidentRecord
+import org.course.recorddtppdd.model.HomeStats
 import org.course.recorddtppdd.model.ViolationRecord
-import org.course.recorddtppdd.viewmodel.HomeViewModel
 import java.time.format.DateTimeFormatter
 
 private val dtFmt = DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm")
 
 @Composable
-fun HomeScreen(vm: HomeViewModel) {
+fun HomeScreen() {
+    val state = remember { HomeState() }
     var selectedTab by remember { mutableStateOf(0) }
     val tabs = listOf("ДТП", "Нарушения ПДД")
+
+    LaunchedEffect(Unit) {
+        state.load()
+    }
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
 
@@ -32,20 +38,20 @@ fun HomeScreen(vm: HomeViewModel) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("Главная", fontSize = 22.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.weight(1f))
-            IconButton(onClick = { vm.load() }) {
+            IconButton(onClick = { state.load() }) {
                 Icon(Icons.Default.Refresh, contentDescription = "Обновить")
             }
         }
 
         Spacer(Modifier.height(12.dp))
 
-        if (vm.isLoading) {
+        if (state.isLoading) {
             CircularProgressIndicator(modifier = Modifier.align(Alignment.CenterHorizontally))
             return@Column
         }
 
-        if (vm.error.isNotBlank()) {
-            Text(vm.error, color = MaterialTheme.colorScheme.error)
+        if (state.error.isNotBlank()) {
+            Text(state.error, color = MaterialTheme.colorScheme.error)
             return@Column
         }
 
@@ -53,12 +59,12 @@ fun HomeScreen(vm: HomeViewModel) {
         Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
             StatCard(
                 title = "ДТП сегодня",
-                value = vm.stats.accidentsToday.toString(),
+                value = state.stats.accidentsToday.toString(),
                 modifier = Modifier.weight(1f)
             )
             StatCard(
                 title = "Нарушений сегодня",
-                value = vm.stats.violationsToday.toString(),
+                value = state.stats.violationsToday.toString(),
                 modifier = Modifier.weight(1f)
             )
         }
@@ -75,8 +81,8 @@ fun HomeScreen(vm: HomeViewModel) {
         Spacer(Modifier.height(8.dp))
 
         when (selectedTab) {
-            0 -> AccidentsTable(vm)
-            1 -> ViolationsTable(vm)
+            0 -> AccidentsTable(state)
+            1 -> ViolationsTable(state)
         }
     }
 }
@@ -96,25 +102,25 @@ private fun StatCard(title: String, value: String, modifier: Modifier = Modifier
 }
 
 @Composable
-private fun AccidentsTable(vm: HomeViewModel) {
+private fun AccidentsTable(state: HomeState) {
     Column {
         // Поиск и сортировка
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedTextField(
-                value = vm.accidentDateFilter,
-                onValueChange = { vm.accidentDateFilter = it },
+                value = state.accidentDateFilter,
+                onValueChange = { state.accidentDateFilter = it },
                 label = { Text("Поиск по дате (гггг-мм-дд)") },
                 modifier = Modifier.weight(1f),
                 singleLine = true
             )
-            IconButton(onClick = { vm.accidentSortAsc = !vm.accidentSortAsc }) {
+            IconButton(onClick = { state.accidentSortAsc = !state.accidentSortAsc }) {
                 Icon(Icons.Default.SwapVert, contentDescription = "Сортировка")
             }
-            Text(if (vm.accidentSortAsc) "↑ по дате" else "↓ по дате", fontSize = 12.sp)
+            Text(if (state.accidentSortAsc) "↑ по дате" else "↓ по дате", fontSize = 12.sp)
         }
         Spacer(Modifier.height(8.dp))
 
-        val rows = vm.filteredAccidents()
+        val rows = state.filteredAccidents()
         if (rows.isEmpty()) {
             Text("Нет записей", color = MaterialTheme.colorScheme.onSurfaceVariant)
             return
@@ -135,24 +141,24 @@ private fun AccidentsTable(vm: HomeViewModel) {
 }
 
 @Composable
-private fun ViolationsTable(vm: HomeViewModel) {
+private fun ViolationsTable(state: HomeState) {
     Column {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedTextField(
-                value = vm.violationDateFilter,
-                onValueChange = { vm.violationDateFilter = it },
+                value = state.violationDateFilter,
+                onValueChange = { state.violationDateFilter = it },
                 label = { Text("Поиск по дате (гггг-мм-дд)") },
                 modifier = Modifier.weight(1f),
                 singleLine = true
             )
-            IconButton(onClick = { vm.violationSortAsc = !vm.violationSortAsc }) {
+            IconButton(onClick = { state.violationSortAsc = !state.violationSortAsc }) {
                 Icon(Icons.Default.SwapVert, contentDescription = "Сортировка")
             }
-            Text(if (vm.violationSortAsc) "↑ по дате" else "↓ по дате", fontSize = 12.sp)
+            Text(if (state.violationSortAsc) "↑ по дате" else "↓ по дате", fontSize = 12.sp)
         }
         Spacer(Modifier.height(8.dp))
 
-        val rows = vm.filteredViolations()
+        val rows = state.filteredViolations()
         if (rows.isEmpty()) {
             Text("Нет записей", color = MaterialTheme.colorScheme.onSurfaceVariant)
             return
@@ -213,5 +219,49 @@ fun DataTable(headers: List<String>, rows: List<List<String>>) {
                 HorizontalDivider(thickness = 0.5.dp)
             }
         }
+    }
+}
+
+private class HomeState {
+    var stats by mutableStateOf(HomeStats(0, 0))
+    var accidents by mutableStateOf<List<AccidentRecord>>(emptyList())
+    var violations by mutableStateOf<List<ViolationRecord>>(emptyList())
+    var isLoading by mutableStateOf(false)
+    var error by mutableStateOf("")
+
+    var accidentDateFilter by mutableStateOf("")
+    var accidentSortAsc by mutableStateOf(false)
+
+    var violationDateFilter by mutableStateOf("")
+    var violationSortAsc by mutableStateOf(false)
+
+    fun load() {
+        isLoading = true
+        error = ""
+        try {
+            stats = Repository.getHomeStats()
+            accidents = Repository.getAllAccidents()
+            violations = Repository.getAllViolations()
+        } catch (e: Exception) {
+            error = "Ошибка загрузки данных: ${e.message}"
+        } finally {
+            isLoading = false
+        }
+    }
+
+    fun filteredAccidents(): List<AccidentRecord> {
+        var list = accidents
+        if (accidentDateFilter.isNotBlank()) {
+            list = list.filter { it.dateTime.toLocalDate().toString().contains(accidentDateFilter) }
+        }
+        return if (accidentSortAsc) list.sortedBy { it.dateTime } else list.sortedByDescending { it.dateTime }
+    }
+
+    fun filteredViolations(): List<ViolationRecord> {
+        var list = violations
+        if (violationDateFilter.isNotBlank()) {
+            list = list.filter { it.dateTime.toLocalDate().toString().contains(violationDateFilter) }
+        }
+        return if (violationSortAsc) list.sortedBy { it.dateTime } else list.sortedByDescending { it.dateTime }
     }
 }
