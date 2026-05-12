@@ -12,9 +12,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import org.course.recorddtppdd.model.Officer
-import org.course.recorddtppdd.viewmodel.AccidentFormViewModel
-import org.course.recorddtppdd.viewmodel.HomeViewModel
-import org.course.recorddtppdd.viewmodel.ViolationFormViewModel
 
 enum class MainSection {
     HOME, ACCIDENT_FORM, VIOLATION_FORM
@@ -26,14 +23,8 @@ fun MainScreen(
     onLogout: () -> Unit
 ) {
     var currentSection by remember { mutableStateOf(MainSection.HOME) }
-    val homeVm = remember { HomeViewModel() }
-    val accidentVm = remember { AccidentFormViewModel() }
-    val violationVm = remember { ViolationFormViewModel() }
-
-    // Загружаем данные при первом открытии главного экрана
-    LaunchedEffect(currentSection) {
-        if (currentSection == MainSection.HOME) homeVm.load()
-    }
+    var accidentFormKey by remember { mutableStateOf(0) }
+    var violationFormKey by remember { mutableStateOf(0) }
 
     Row(modifier = Modifier.fillMaxSize()) {
         // Navigation Rail
@@ -55,7 +46,7 @@ fun MainScreen(
                 label = { Text("Оформление ДТП") },
                 selected = currentSection == MainSection.ACCIDENT_FORM,
                 onClick = {
-                    accidentVm.reset()
+                    accidentFormKey++
                     currentSection = MainSection.ACCIDENT_FORM
                 }
             )
@@ -65,7 +56,7 @@ fun MainScreen(
                 label = { Text("Оформление ПДД") },
                 selected = currentSection == MainSection.VIOLATION_FORM,
                 onClick = {
-                    violationVm.reset()
+                    violationFormKey++
                     currentSection = MainSection.VIOLATION_FORM
                 }
             )
@@ -85,25 +76,25 @@ fun MainScreen(
         Box(modifier = Modifier.fillMaxSize()) {
             when (currentSection) {
                 MainSection.HOME ->
-                    HomeScreen(vm = homeVm)
+                    HomeScreen()
                 MainSection.ACCIDENT_FORM ->
-                    AccidentFormScreen(
-                        vm = accidentVm,
-                        officerId = officer.id,
-                        onDone = {
-                            homeVm.load()
-                            currentSection = MainSection.HOME
-                        }
-                    )
+                    key(accidentFormKey) {
+                        AccidentFormScreen(
+                            officerId = officer.id,
+                            onDone = {
+                                currentSection = MainSection.HOME
+                            }
+                        )
+                    }
                 MainSection.VIOLATION_FORM ->
-                    ViolationFormScreen(
-                        vm = violationVm,
-                        officerId = officer.id,
-                        onDone = {
-                            homeVm.load()
-                            currentSection = MainSection.HOME
-                        }
-                    )
+                    key(violationFormKey) {
+                        ViolationFormScreen(
+                            officerId = officer.id,
+                            onDone = {
+                                currentSection = MainSection.HOME
+                            }
+                        )
+                    }
             }
         }
     }

@@ -18,8 +18,6 @@ kotlin {
             implementation(libs.compose.ui)
             implementation(libs.compose.components.resources)
             implementation(libs.compose.uiToolingPreview)
-            implementation(libs.androidx.lifecycle.viewmodelCompose)
-            implementation(libs.androidx.lifecycle.runtimeCompose)
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)
@@ -33,6 +31,7 @@ kotlin {
             implementation(libs.exposed.dao)
             implementation(libs.exposed.jdbc)
             implementation(libs.exposed.java.time)
+            implementation(libs.flyway.core)
             implementation(libs.mysql.connector)
             // Logging
             implementation(libs.slf4j.simple)

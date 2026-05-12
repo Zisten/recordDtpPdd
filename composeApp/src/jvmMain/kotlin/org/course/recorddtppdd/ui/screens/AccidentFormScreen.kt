@@ -10,16 +10,250 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import org.course.recorddtppdd.viewmodel.*
+import org.course.recorddtppdd.db.Repository
+import java.time.LocalDate
+
+/** Данные транспортного средства (для каждого участника) */
+private data class VehicleFormData(
+    var make: String = "",
+    var model: String = "",
+    var vin: String = "",
+    var numberPlate: String = "",
+    var sts: String = "",
+    var ownerName: String = "",
+    var ownerAddress: String = ""
+)
+
+/** Данные водителя (для каждого участника) */
+private data class DriverFormData(
+    var fullName: String = "",
+    var birthdate: String = "",
+    var address: String = "",
+    var phone: String = "",
+    var licSeries: String = "",
+    var licNumber: String = "",
+    var licCategory: String = "",
+    var licIssueDate: String = "",
+    var insCompany: String = "",
+    var insPolicy: String = "",
+    var insExpiry: String = "",
+    var hasHull: Boolean = false
+)
+
+private val ACCIDENT_CIRCUMSTANCES = listOf(
+    "Превышение скорости",
+    "Проезд на запрещающий сигнал светофора",
+    "Несоблюдение дистанции",
+    "Нарушение правил обгона",
+    "Нарушение правил поворота/разворота",
+    "Нарушение правил проезда перекрёстка",
+    "Выезд на встречную полосу движения",
+    "Нарушение правил остановки/стоянки",
+    "Управление ТС в состоянии опьянения",
+    "Неисправность транспортного средства",
+    "Неудовлетворительное состояние дороги",
+    "Плохая видимость (туман, снегопад)",
+    "Нарушение правил проезда ж/д переезда",
+    "Нарушение правил перестроения",
+    "Иное"
+)
+
+private class AccidentFormState {
+    var currentStep by mutableStateOf(0)
+    val totalSteps = 7
+
+    var locationStreet by mutableStateOf("")
+    var locationBuilding by mutableStateOf("")
+    var accidentDate by mutableStateOf(java.time.LocalDate.now().toString())
+    var accidentTime by mutableStateOf("12:00")
+    var witnessesName by mutableStateOf("")
+    var witnessesAddress by mutableStateOf("")
+    var noWitnesses by mutableStateOf(false)
+
+    var currentSide by mutableStateOf("A")
+
+    var vehicleA by mutableStateOf(VehicleFormData())
+    var vehicleB by mutableStateOf(VehicleFormData())
+    var driverA by mutableStateOf(DriverFormData())
+    var driverB by mutableStateOf(DriverFormData())
+
+    var damagesA by mutableStateOf("")
+    var notesA by mutableStateOf("")
+    var damagesB by mutableStateOf("")
+    var notesB by mutableStateOf("")
+
+    val selectedCircumstances = mutableStateListOf<String>()
+
+    var accidentDescription by mutableStateOf("")
+    var guiltySide by mutableStateOf("не определён")
+
+    var isSaving by mutableStateOf(false)
+    var saveError by mutableStateOf("")
+    var saveSuccess by mutableStateOf(false)
+
+    fun nextStep() { if (currentStep < totalSteps - 1) currentStep++ }
+    fun prevStep() { if (currentStep > 0) currentStep-- }
+
+    fun toggleCircumstance(item: String) {
+        if (selectedCircumstances.contains(item)) selectedCircumstances.remove(item)
+        else selectedCircumstances.add(item)
+    }
+
+    fun save(officerId: Int, onSuccess: () -> Unit) {
+        isSaving = true
+        saveError = ""
+        try {
+            val dt = java.time.LocalDateTime.parse(
+                "${accidentDate}T${accidentTime.padStart(5, '0')}:00"
+            )
+            val circumstances = buildCircumstancesJson(selectedCircumstances.toList())
+            val witnessesInfo = listOf(witnessesName, witnessesAddress)
+                .map { it.trim() }
+                .filter { it.isNotBlank() }
+                .joinToString(", ")
+                .ifBlank { null }
+            val explanation = buildString {
+                if (accidentDescription.isNotBlank()) append(accidentDescription.trim())
+                if (guiltySide.isNotBlank()) {
+                    if (isNotEmpty()) append("\n")
+                    append("Виновный: $guiltySide")
+                }
+            }.ifBlank { null }
+
+            val accidentId = Repository.insertAccident(
+                officerId = officerId,
+                typeId = null,
+                dateTime = dt,
+                street = locationStreet,
+                house = locationBuilding.ifBlank { null },
+                witnessesInfo = if (noWitnesses) null else witnessesInfo,
+                circumstancesJson = circumstances,
+                explanation = explanation
+            )
+
+            val driverAId = Repository.getOrCreateDriver(
+                fullName = driverA.fullName,
+                birthDate = parseDateOrNull(driverA.birthdate),
+                registrationAddress = driverA.address.ifBlank { null },
+                actualAddress = driverA.address.ifBlank { null },
+                phone = driverA.phone.ifBlank { null }
+            )
+            val vehicleAId = Repository.getOrCreateVehicle(
+                ownerId = null,
+                brand = vehicleA.make,
+                model = vehicleA.model,
+                numberPlate = vehicleA.numberPlate,
+                vin = vehicleA.vin.ifBlank { null },
+                regCertificate = vehicleA.sts.ifBlank { null },
+                insuranceName = driverA.insCompany.ifBlank { null },
+                insurancePolicy = driverA.insPolicy.ifBlank { null },
+                insuranceExpiry = parseDateOrNull(driverA.insExpiry),
+                hasHullInsurance = driverA.hasHull
+            )
+            if (driverA.licSeries.isNotBlank() && driverA.licNumber.isNotBlank()) {
+                val issueDate = parseDateOrNull(driverA.licIssueDate) ?: LocalDate.now()
+                Repository.insertLicense(
+                    driverId = driverAId,
+                    series = driverA.licSeries,
+                    number = driverA.licNumber,
+                    category = driverA.licCategory.ifBlank { null },
+                    issueDate = issueDate
+                )
+            }
+
+            Repository.insertParticipant(
+                accidentId = accidentId,
+                driverId = driverAId,
+                vehicleId = vehicleAId,
+                role = 'A',
+                impactSpot = null,
+                damageDetails = damagesA.ifBlank { null },
+                remarks = notesA.ifBlank { null }
+            )
+
+            val driverBId = Repository.getOrCreateDriver(
+                fullName = driverB.fullName,
+                birthDate = parseDateOrNull(driverB.birthdate),
+                registrationAddress = driverB.address.ifBlank { null },
+                actualAddress = driverB.address.ifBlank { null },
+                phone = driverB.phone.ifBlank { null }
+            )
+            val vehicleBId = Repository.getOrCreateVehicle(
+                ownerId = null,
+                brand = vehicleB.make,
+                model = vehicleB.model,
+                numberPlate = vehicleB.numberPlate,
+                vin = vehicleB.vin.ifBlank { null },
+                regCertificate = vehicleB.sts.ifBlank { null },
+                insuranceName = driverB.insCompany.ifBlank { null },
+                insurancePolicy = driverB.insPolicy.ifBlank { null },
+                insuranceExpiry = parseDateOrNull(driverB.insExpiry),
+                hasHullInsurance = driverB.hasHull
+            )
+            if (driverB.licSeries.isNotBlank() && driverB.licNumber.isNotBlank()) {
+                val issueDate = parseDateOrNull(driverB.licIssueDate) ?: LocalDate.now()
+                Repository.insertLicense(
+                    driverId = driverBId,
+                    series = driverB.licSeries,
+                    number = driverB.licNumber,
+                    category = driverB.licCategory.ifBlank { null },
+                    issueDate = issueDate
+                )
+            }
+
+            Repository.insertParticipant(
+                accidentId = accidentId,
+                driverId = driverBId,
+                vehicleId = vehicleBId,
+                role = 'B',
+                impactSpot = null,
+                damageDetails = damagesB.ifBlank { null },
+                remarks = notesB.ifBlank { null }
+            )
+
+            saveSuccess = true
+            onSuccess()
+        } catch (e: Exception) {
+            saveError = "Ошибка сохранения: ${e.message}"
+        } finally {
+            isSaving = false
+        }
+    }
+
+    fun reset() {
+        currentStep = 0
+        locationStreet = ""
+        locationBuilding = ""
+        accidentDate = java.time.LocalDate.now().toString()
+        accidentTime = "12:00"
+        witnessesName = ""
+        witnessesAddress = ""
+        noWitnesses = false
+        currentSide = "A"
+        vehicleA = VehicleFormData()
+        vehicleB = VehicleFormData()
+        driverA = DriverFormData()
+        driverB = DriverFormData()
+        damagesA = ""
+        notesA = ""
+        damagesB = ""
+        notesB = ""
+        selectedCircumstances.clear()
+        accidentDescription = ""
+        guiltySide = "не определён"
+        saveError = ""
+        saveSuccess = false
+    }
+}
 
 private val GUILTY_OPTIONS = listOf("A", "B", "не определён")
 
 @Composable
 fun AccidentFormScreen(
-    vm: AccidentFormViewModel,
     officerId: Int,
     onDone: () -> Unit
 ) {
+    val state = remember { AccidentFormState() }
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
         Text(
             "Оформление ДТП",
@@ -30,25 +264,25 @@ fun AccidentFormScreen(
         Spacer(Modifier.height(8.dp))
 
         // Индикатор шагов
-        StepIndicator(current = vm.currentStep, total = vm.totalSteps)
+        StepIndicator(current = state.currentStep, total = state.totalSteps)
         Spacer(Modifier.height(16.dp))
 
         // Контент шага
         Box(modifier = Modifier.weight(1f)) {
-            when (vm.currentStep) {
-                0 -> Step1GeneralInfo(vm)
-                1 -> Step2SelectSide(vm)
-                2 -> Step3VehicleData(vm)
-                3 -> Step4DriverData(vm)
-                4 -> Step5Damages(vm)
-                5 -> Step6Circumstances(vm)
-                6 -> Step7Completion(vm)
+            when (state.currentStep) {
+                0 -> Step1GeneralInfo(state)
+                1 -> Step2SelectSide(state)
+                2 -> Step3VehicleData(state)
+                3 -> Step4DriverData(state)
+                4 -> Step5Damages(state)
+                5 -> Step6Circumstances(state)
+                6 -> Step7Completion(state)
             }
         }
 
         // Сообщение об ошибке
-        if (vm.saveError.isNotBlank()) {
-            Text(vm.saveError, color = MaterialTheme.colorScheme.error, fontSize = 13.sp)
+        if (state.saveError.isNotBlank()) {
+            Text(state.saveError, color = MaterialTheme.colorScheme.error, fontSize = 13.sp)
             Spacer(Modifier.height(4.dp))
         }
 
@@ -57,20 +291,20 @@ fun AccidentFormScreen(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            if (vm.currentStep > 0) {
-                OutlinedButton(onClick = { vm.prevStep() }) { Text("Назад") }
+            if (state.currentStep > 0) {
+                OutlinedButton(onClick = { state.prevStep() }) { Text("Назад") }
             } else {
                 Spacer(Modifier.width(1.dp))
             }
 
-            if (vm.currentStep < vm.totalSteps - 1) {
-                Button(onClick = { vm.nextStep() }) { Text("Далее") }
+            if (state.currentStep < state.totalSteps - 1) {
+                Button(onClick = { state.nextStep() }) { Text("Далее") }
             } else {
                 Button(
-                    onClick = { vm.save(officerId, onDone) },
-                    enabled = !vm.isSaving
+                    onClick = { state.save(officerId, onDone) },
+                    enabled = !state.isSaving
                 ) {
-                    if (vm.isSaving) CircularProgressIndicator(
+                    if (state.isSaving) CircularProgressIndicator(
                         modifier = Modifier.size(20.dp),
                         color = MaterialTheme.colorScheme.onPrimary,
                         strokeWidth = 2.dp
@@ -109,25 +343,25 @@ private fun StepIndicator(current: Int, total: Int) {
 // ── Шаг 1: Общая информация ──────────────────────────────────────────────────
 
 @Composable
-private fun Step1GeneralInfo(vm: AccidentFormViewModel) {
+private fun Step1GeneralInfo(state: AccidentFormState) {
     val scroll = rememberScrollState()
     Column(modifier = Modifier.fillMaxSize().verticalScroll(scroll), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         SectionTitle("Место ДТП")
-        FormField("Улица", vm.locationStreet) { vm.locationStreet = it }
-        FormField("Номер дома / км", vm.locationBuilding) { vm.locationBuilding = it }
+        FormField("Улица", state.locationStreet) { state.locationStreet = it }
+        FormField("Номер дома / км", state.locationBuilding) { state.locationBuilding = it }
 
         SectionTitle("Дата и время")
-        FormField("Дата (гггг-мм-дд)", vm.accidentDate) { vm.accidentDate = it }
-        FormField("Время (чч:мм)", vm.accidentTime) { vm.accidentTime = it }
+        FormField("Дата (гггг-мм-дд)", state.accidentDate) { state.accidentDate = it }
+        FormField("Время (чч:мм)", state.accidentTime) { state.accidentTime = it }
 
         SectionTitle("Свидетели")
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Checkbox(checked = vm.noWitnesses, onCheckedChange = { vm.noWitnesses = it })
+            Checkbox(checked = state.noWitnesses, onCheckedChange = { state.noWitnesses = it })
             Text("Свидетели отсутствуют")
         }
-        if (!vm.noWitnesses) {
-            FormField("ФИО свидетеля", vm.witnessesName) { vm.witnessesName = it }
-            FormField("Адрес свидетеля", vm.witnessesAddress) { vm.witnessesAddress = it }
+        if (!state.noWitnesses) {
+            FormField("ФИО свидетеля", state.witnessesName) { state.witnessesName = it }
+            FormField("Адрес свидетеля", state.witnessesAddress) { state.witnessesAddress = it }
         }
     }
 }
@@ -135,7 +369,7 @@ private fun Step1GeneralInfo(vm: AccidentFormViewModel) {
 // ── Шаг 2: Выбор стороны ────────────────────────────────────────────────────
 
 @Composable
-private fun Step2SelectSide(vm: AccidentFormViewModel) {
+private fun Step2SelectSide(state: AccidentFormState) {
     Column(
         modifier = Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.Center,
@@ -150,8 +384,8 @@ private fun Step2SelectSide(vm: AccidentFormViewModel) {
         Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
             listOf("A", "B").forEach { side ->
                 ElevatedButton(
-                    onClick = { vm.currentSide = side },
-                    colors = if (vm.currentSide == side)
+                    onClick = { state.currentSide = side },
+                    colors = if (state.currentSide == side)
                         ButtonDefaults.elevatedButtonColors(
                             containerColor = MaterialTheme.colorScheme.primaryContainer
                         )
@@ -163,7 +397,7 @@ private fun Step2SelectSide(vm: AccidentFormViewModel) {
         }
         Spacer(Modifier.height(16.dp))
         Text(
-            "Текущий участник для заполнения: ${vm.currentSide}",
+            "Текущий участник для заполнения: ${state.currentSide}",
             color = MaterialTheme.colorScheme.primary
         )
         Spacer(Modifier.height(8.dp))
@@ -178,14 +412,14 @@ private fun Step2SelectSide(vm: AccidentFormViewModel) {
 // ── Шаг 3: Данные ТС ────────────────────────────────────────────────────────
 
 @Composable
-private fun Step3VehicleData(vm: AccidentFormViewModel) {
+private fun Step3VehicleData(state: AccidentFormState) {
     val scroll = rememberScrollState()
     Column(modifier = Modifier.fillMaxSize().verticalScroll(scroll), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         SectionTitle("ТС участника A")
-        VehicleFields(vm.vehicleA) { vm.vehicleA = it }
+        VehicleFields(state.vehicleA) { state.vehicleA = it }
         HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
         SectionTitle("ТС участника B")
-        VehicleFields(vm.vehicleB) { vm.vehicleB = it }
+        VehicleFields(state.vehicleB) { state.vehicleB = it }
     }
 }
 
@@ -203,14 +437,14 @@ private fun VehicleFields(data: VehicleFormData, onUpdate: (VehicleFormData) -> 
 // ── Шаг 4: Данные водителей ─────────────────────────────────────────────────
 
 @Composable
-private fun Step4DriverData(vm: AccidentFormViewModel) {
+private fun Step4DriverData(state: AccidentFormState) {
     val scroll = rememberScrollState()
     Column(modifier = Modifier.fillMaxSize().verticalScroll(scroll), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         SectionTitle("Водитель A")
-        DriverFields(vm.driverA) { vm.driverA = it }
+        DriverFields(state.driverA) { state.driverA = it }
         HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
         SectionTitle("Водитель B")
-        DriverFields(vm.driverB) { vm.driverB = it }
+        DriverFields(state.driverB) { state.driverB = it }
     }
 }
 
@@ -251,29 +485,29 @@ private fun DriverFields(data: DriverFormData, onUpdate: (DriverFormData) -> Uni
 // ── Шаг 5: Повреждения ──────────────────────────────────────────────────────
 
 @Composable
-private fun Step5Damages(vm: AccidentFormViewModel) {
+private fun Step5Damages(state: AccidentFormState) {
     val scroll = rememberScrollState()
     Column(modifier = Modifier.fillMaxSize().verticalScroll(scroll), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         SectionTitle("Повреждения ТС A")
         OutlinedTextField(
-            value = vm.damagesA, onValueChange = { vm.damagesA = it },
+            value = state.damagesA, onValueChange = { state.damagesA = it },
             label = { Text("Перечень повреждений") },
             modifier = Modifier.fillMaxWidth().height(100.dp)
         )
         OutlinedTextField(
-            value = vm.notesA, onValueChange = { vm.notesA = it },
+            value = state.notesA, onValueChange = { state.notesA = it },
             label = { Text("Замечания") },
             modifier = Modifier.fillMaxWidth().height(80.dp)
         )
         HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
         SectionTitle("Повреждения ТС B")
         OutlinedTextField(
-            value = vm.damagesB, onValueChange = { vm.damagesB = it },
+            value = state.damagesB, onValueChange = { state.damagesB = it },
             label = { Text("Перечень повреждений") },
             modifier = Modifier.fillMaxWidth().height(100.dp)
         )
         OutlinedTextField(
-            value = vm.notesB, onValueChange = { vm.notesB = it },
+            value = state.notesB, onValueChange = { state.notesB = it },
             label = { Text("Замечания") },
             modifier = Modifier.fillMaxWidth().height(80.dp)
         )
@@ -283,7 +517,7 @@ private fun Step5Damages(vm: AccidentFormViewModel) {
 // ── Шаг 6: Обстоятельства ───────────────────────────────────────────────────
 
 @Composable
-private fun Step6Circumstances(vm: AccidentFormViewModel) {
+private fun Step6Circumstances(state: AccidentFormState) {
     val scroll = rememberScrollState()
     Column(modifier = Modifier.fillMaxSize().verticalScroll(scroll), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         SectionTitle("Обстоятельства ДТП")
@@ -299,8 +533,8 @@ private fun Step6Circumstances(vm: AccidentFormViewModel) {
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Checkbox(
-                    checked = vm.selectedCircumstances.contains(item),
-                    onCheckedChange = { vm.toggleCircumstance(item) }
+                    checked = state.selectedCircumstances.contains(item),
+                    onCheckedChange = { state.toggleCircumstance(item) }
                 )
                 Text(item, fontSize = 14.sp)
             }
@@ -311,13 +545,13 @@ private fun Step6Circumstances(vm: AccidentFormViewModel) {
 // ── Шаг 7: Завершение ───────────────────────────────────────────────────────
 
 @Composable
-private fun Step7Completion(vm: AccidentFormViewModel) {
+private fun Step7Completion(state: AccidentFormState) {
     val scroll = rememberScrollState()
     Column(modifier = Modifier.fillMaxSize().verticalScroll(scroll), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         SectionTitle("Завершение оформления")
         OutlinedTextField(
-            value = vm.accidentDescription,
-            onValueChange = { vm.accidentDescription = it },
+            value = state.accidentDescription,
+            onValueChange = { state.accidentDescription = it },
             label = { Text("Текстовое описание ДТП") },
             modifier = Modifier.fillMaxWidth().height(150.dp)
         )
@@ -325,8 +559,8 @@ private fun Step7Completion(vm: AccidentFormViewModel) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             GUILTY_OPTIONS.forEach { opt ->
                 FilterChip(
-                    selected = vm.guiltySide == opt,
-                    onClick = { vm.guiltySide = opt },
+                    selected = state.guiltySide == opt,
+                    onClick = { state.guiltySide = opt },
                     label = { Text(opt) }
                 )
             }
@@ -335,10 +569,10 @@ private fun Step7Completion(vm: AccidentFormViewModel) {
         Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
             Column(modifier = Modifier.padding(12.dp)) {
                 Text("Сводка:", fontWeight = FontWeight.SemiBold)
-                Text("Место: ${vm.locationStreet} ${vm.locationBuilding}", fontSize = 13.sp)
-                Text("Дата/время: ${vm.accidentDate} ${vm.accidentTime}", fontSize = 13.sp)
-                Text("Виновный: ${vm.guiltySide}", fontSize = 13.sp)
-                Text("Обстоятельств: ${vm.selectedCircumstances.size}", fontSize = 13.sp)
+                Text("Место: ${state.locationStreet} ${state.locationBuilding}", fontSize = 13.sp)
+                Text("Дата/время: ${state.accidentDate} ${state.accidentTime}", fontSize = 13.sp)
+                Text("Виновный: ${state.guiltySide}", fontSize = 13.sp)
+                Text("Обстоятельств: ${state.selectedCircumstances.size}", fontSize = 13.sp)
             }
         }
     }
@@ -364,3 +598,11 @@ private fun FormField(label: String, value: String, onValueChange: (String) -> U
         singleLine = true
     )
 }
+
+private fun buildCircumstancesJson(items: List<String>): String =
+    "[${items.joinToString(",") { "\"${it.replace("\"", "\\\"")}\"" }}]"
+
+private fun parseDateOrNull(value: String): LocalDate? =
+    value.trim().takeIf { it.isNotBlank() }?.let {
+        runCatching { LocalDate.parse(it) }.getOrNull()
+    }
