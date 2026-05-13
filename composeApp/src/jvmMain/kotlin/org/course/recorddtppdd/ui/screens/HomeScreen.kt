@@ -27,7 +27,7 @@ private val dtFmt = DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm")
 fun HomeScreen() {
     val state = remember { HomeState() }
     var selectedTab by remember { mutableStateOf(0) }
-    val tabs = listOf("ДТП", "Нарушения ПДД", "Аналитика (SQL)")
+    val tabs = listOf("ДТП", "Нарушения ПДД", "Аналитика")
 
     LaunchedEffect(Unit) {
         state.load()
@@ -35,7 +35,6 @@ fun HomeScreen() {
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
 
-        // Заголовок + кнопка обновления
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("Главная", fontSize = 22.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.weight(1f))
@@ -56,7 +55,6 @@ fun HomeScreen() {
             return@Column
         }
 
-        // Карточки статистики
         Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
             StatCard(
                 title = "ДТП сегодня",
@@ -72,7 +70,7 @@ fun HomeScreen() {
 
         Spacer(Modifier.height(16.dp))
 
-        // Вкладки
+
         TabRow(selectedTabIndex = selectedTab) {
             tabs.forEachIndexed { i, title ->
                 Tab(selected = i == selectedTab, onClick = { selectedTab = i }, text = { Text(title) })
@@ -106,7 +104,7 @@ private fun StatCard(title: String, value: String, modifier: Modifier = Modifier
 @Composable
 private fun AccidentsTable(state: HomeState) {
     Column {
-        // Поиск и сортировка
+        // поиску
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedTextField(
                 value = state.accidentDateFilter,

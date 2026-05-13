@@ -40,7 +40,6 @@ private data class DriverFormData(
     var hasHull: Boolean = false
 )
 
-// Пункты строго по таблице AccidentTypes
 private val ACCIDENT_CIRCUMSTANCES = listOf(
     "1. ТС находился на стоянке, парковке, обочине и т.п в неподвижном состоянии",
     "2. Заезжал на стоянку, парковку, во двор, на второстепенную дорогу",
@@ -85,7 +84,6 @@ private class AccidentFormState {
     var damagesB by mutableStateOf("")
     var notesB by mutableStateOf("")
 
-    // Используем множественный выбор для обстоятельств
     val selectedCircumstances = mutableStateListOf<String>()
 
     var accidentDescription by mutableStateOf("")
@@ -103,7 +101,7 @@ private class AccidentFormState {
         else selectedCircumstances.add(item)
     }
 
-    // --- Автозаполнение А ---
+    // автозаполнение полей водителя
     fun lookupOwnerAByPlate() {
         if (vehicleA.numberPlate.isBlank()) return
         try {
@@ -120,6 +118,7 @@ private class AccidentFormState {
         } catch (_: Exception) {}
     }
 
+    // автозаполнение полей машины
     fun lookupVehicleAByVin() {
         if (vehicleA.vin.isBlank()) return
         try {
@@ -140,7 +139,7 @@ private class AccidentFormState {
         } catch (_: Exception) {}
     }
 
-    // --- Автозаполнение B ---
+    // автозаполнение полей водителя
     fun lookupOwnerBByPlate() {
         if (vehicleB.numberPlate.isBlank()) return
         try {
@@ -157,6 +156,7 @@ private class AccidentFormState {
         } catch (_: Exception) {}
     }
 
+    // автозаполнение полей машины
     fun lookupVehicleBByVin() {
         if (vehicleB.vin.isBlank()) return
         try {
@@ -177,7 +177,7 @@ private class AccidentFormState {
         } catch (_: Exception) {}
     }
 
-    // --- Автозаполнение ВУ ---
+    // автозаполнение водителя
     fun lookupDriverAByLicense() {
         if (driverA.licSeries.isBlank() || driverA.licNumber.isBlank()) return
         try {
@@ -198,6 +198,7 @@ private class AccidentFormState {
         } catch (_: Exception) {}
     }
 
+    // автозаполнение водителя
     fun lookupDriverBByLicense() {
         if (driverB.licSeries.isBlank() || driverB.licNumber.isBlank()) return
         try {
@@ -226,7 +227,6 @@ private class AccidentFormState {
                 "${accidentDate}T${accidentTime.padStart(5, '0')}:00"
             )
 
-            // Преобразуем выбранные строки в JSON массив
             val circumstances = buildCircumstancesJson(selectedCircumstances.toList())
 
             val witnessesInfo = listOf(witnessesName, witnessesAddress)
@@ -242,10 +242,8 @@ private class AccidentFormState {
                 }
             }.ifBlank { null }
 
-            // typeId оставляем null, так как обстоятельства хранятся в JSON
             val accidentId = Repository.insertAccident(
                 officerId = officerId,
-                typeId = null,
                 dateTime = dt,
                 street = locationStreet,
                 house = locationBuilding.ifBlank { null },
@@ -254,7 +252,7 @@ private class AccidentFormState {
                 explanation = explanation
             )
 
-            // Сначала ищем водителя A по номеру прав, если нет — создаем
+            //
             val dALic = if (driverA.licSeries.isNotBlank() && driverA.licNumber.isNotBlank()) {
                 Repository.findLicenseBySeriesAndNumber(driverA.licSeries, driverA.licNumber)
             } else null
@@ -267,7 +265,7 @@ private class AccidentFormState {
                 phone = driverA.phone.ifBlank { null }
             )
 
-            // Владелец A для ТС
+
             val ownerAId = if (vehicleA.ownerName.isNotBlank()) {
                 Repository.getOrCreateDriver(vehicleA.ownerName, null, vehicleA.ownerAddress.ifBlank { null }, null, null)
             } else null
@@ -306,7 +304,7 @@ private class AccidentFormState {
                 remarks = notesA.ifBlank { null }
             )
 
-            // Водитель B
+            //
             val dBLic = if (driverB.licSeries.isNotBlank() && driverB.licNumber.isNotBlank()) {
                 Repository.findLicenseBySeriesAndNumber(driverB.licSeries, driverB.licNumber)
             } else null
@@ -365,29 +363,6 @@ private class AccidentFormState {
         }
     }
 
-    fun reset() {
-        currentStep = 0
-        locationStreet = ""
-        locationBuilding = ""
-        accidentDate = java.time.LocalDate.now().toString()
-        accidentTime = "12:00"
-        witnessesName = ""
-        witnessesAddress = ""
-        noWitnesses = false
-        vehicleA = VehicleFormData()
-        vehicleB = VehicleFormData()
-        driverA = DriverFormData()
-        driverB = DriverFormData()
-        damagesA = ""
-        notesA = ""
-        damagesB = ""
-        notesB = ""
-        selectedCircumstances.clear()
-        accidentDescription = ""
-        guiltySide = "не определён"
-        saveError = ""
-        saveSuccess = false
-    }
 }
 
 private val GUILTY_OPTIONS = listOf("A", "B", "не определён")
@@ -407,7 +382,6 @@ fun AccidentFormScreen(
         )
         Spacer(Modifier.height(8.dp))
 
-        // Индикатор шагов
         StepIndicator(current = state.currentStep, total = state.totalSteps)
         Spacer(Modifier.height(16.dp))
 
@@ -423,13 +397,11 @@ fun AccidentFormScreen(
             }
         }
 
-        // Сообщение об ошибке
         if (state.saveError.isNotBlank()) {
             Text(state.saveError, color = MaterialTheme.colorScheme.error, fontSize = 13.sp)
             Spacer(Modifier.height(4.dp))
         }
 
-        // Навигационные кнопки
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween
@@ -511,10 +483,7 @@ private fun Step1GeneralInfo(state: AccidentFormState) {
 private fun Step2VehicleData(state: AccidentFormState) {
     val scroll = rememberScrollState()
     Column(modifier = Modifier.fillMaxSize().verticalScroll(scroll), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Text(
-            "Госномер → Заполняет владельца. VIN → Заполняет марку, модель и страховку.",
-            fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
+
         SectionTitle("ТС участника A")
         VehicleFields(
             data = state.vehicleA,
@@ -546,7 +515,7 @@ private fun VehicleFields(
         OutlinedTextField(
             value = data.numberPlate,
             onValueChange = { onUpdate(data.copy(numberPlate = it)) },
-            label = { Text("Госномер (Поиск владельца)") },
+            label = { Text("Госномер") },
             modifier = Modifier.weight(1f),
             singleLine = true
         )
@@ -558,7 +527,7 @@ private fun VehicleFields(
         OutlinedTextField(
             value = data.vin,
             onValueChange = { onUpdate(data.copy(vin = it)) },
-            label = { Text("VIN (Поиск авто и страховки)") },
+            label = { Text("VIN") },
             modifier = Modifier.weight(1f),
             singleLine = true
         )
@@ -578,10 +547,6 @@ private fun VehicleFields(
 private fun Step3DriverData(state: AccidentFormState) {
     val scroll = rememberScrollState()
     Column(modifier = Modifier.fillMaxSize().verticalScroll(scroll), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Text(
-            "Введите серию и номер ВУ и нажмите лупу для автозаполнения водителя.",
-            fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
         SectionTitle("Водитель A")
         DriverFields(state.driverA, onLookup = { state.lookupDriverAByLicense() }) { state.driverA = it }
 

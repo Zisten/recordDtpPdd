@@ -1,5 +1,6 @@
 package org.course.recorddtppdd.ui.screens
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -45,7 +46,7 @@ private class ViolationFormState {
     var witnessAddress by mutableStateOf("")
     var witnessPhone by mutableStateOf("")
     var noWitnesses by mutableStateOf(false)
-    var violationDate by mutableStateOf(java.time.LocalDate.now().toString())
+    var violationDate by mutableStateOf(LocalDate.now().toString())
     var violationTime by mutableStateOf("12:00")
 
     var isSaving by mutableStateOf(false)
@@ -80,7 +81,7 @@ private class ViolationFormState {
             }
         } catch (_: Exception) {}
     }
-
+    // автозаполние владельца
     fun lookupOwnerByPlate() {
         if (vehiclePlate.isBlank()) return
         try {
@@ -94,7 +95,7 @@ private class ViolationFormState {
             }
         } catch (_: Exception) {}
     }
-
+    // автозаполнение машины
     fun lookupVehicleByVin() {
         if (vehicleVin.isBlank()) return
         try {
@@ -114,7 +115,6 @@ private class ViolationFormState {
                 "${violationDate}T${violationTime.padStart(5, '0')}:00"
             )
 
-            // Водитель (если найден по ВУ - берем его, иначе создаем)
             val dLic = if (licSeries.isNotBlank() && licNumber.isNotBlank()) {
                 Repository.findLicenseBySeriesAndNumber(licSeries, licNumber)
             } else null
@@ -180,36 +180,6 @@ private class ViolationFormState {
             isSaving = false
         }
     }
-
-    fun reset() {
-        currentStep = 0
-        driverFullName = ""
-        driverBirthdate = ""
-        driverAddress = ""
-        driverPhone = ""
-        licSeries = ""
-        licNumber = ""
-        licCategory = ""
-        licIssueDate = ""
-        vehiclePlate = ""
-        vehicleBrand = ""
-        vehicleModel = ""
-        vehicleOwner = ""
-        vehicleVin = ""
-        vehicleOwnerAddress = ""
-        violationTypeName = ""
-        npaPoint = ""
-        street = ""
-        houseNumber = ""
-        witnessName = ""
-        witnessAddress = ""
-        witnessPhone = ""
-        noWitnesses = false
-        violationDate = java.time.LocalDate.now().toString()
-        violationTime = "12:00"
-        saveError = ""
-        saveSuccess = false
-    }
 }
 
 @Composable
@@ -227,11 +197,9 @@ fun ViolationFormScreen(
         )
         Spacer(Modifier.height(8.dp))
 
-        // Индикатор шагов
         ViolationStepIndicator(current = state.currentStep, total = state.totalSteps)
         Spacer(Modifier.height(16.dp))
 
-        // Контент шага
         Box(modifier = Modifier.weight(1f)) {
             when (state.currentStep) {
                 0 -> VStep1PersonalData(state)
@@ -240,13 +208,11 @@ fun ViolationFormScreen(
             }
         }
 
-        // Ошибка сохранения
         if (state.saveError.isNotBlank()) {
             Text(state.saveError, color = MaterialTheme.colorScheme.error, fontSize = 13.sp)
             Spacer(Modifier.height(4.dp))
         }
 
-        // Навигация
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween
@@ -301,10 +267,6 @@ private fun VStep1PersonalData(state: ViolationFormState) {
     val scroll = rememberScrollState()
     Column(modifier = Modifier.fillMaxSize().verticalScroll(scroll), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         VSectionTitle("Водительское удостоверение")
-        Text(
-            "Введите серию и номер ВУ и нажмите лупу для автозаполнения.",
-            fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedTextField(
                 value = state.licSeries, onValueChange = { state.licSeries = it },
@@ -343,15 +305,11 @@ private fun VStep2VehicleData(state: ViolationFormState) {
     val scroll = rememberScrollState()
     Column(modifier = Modifier.fillMaxSize().verticalScroll(scroll), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         VSectionTitle("Транспортное средство")
-        Text(
-            "Госномер → Заполняет владельца. VIN → Заполняет марку и модель.",
-            fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedTextField(
                 value = state.vehiclePlate,
                 onValueChange = { state.vehiclePlate = it },
-                label = { Text("Госномер (Поиск владельца)") },
+                label = { Text("Госномер") },
                 modifier = Modifier.weight(1f),
                 singleLine = true
             )
@@ -363,7 +321,7 @@ private fun VStep2VehicleData(state: ViolationFormState) {
             OutlinedTextField(
                 value = state.vehicleVin,
                 onValueChange = { state.vehicleVin = it },
-                label = { Text("VIN (Поиск авто)") },
+                label = { Text("VIN") },
                 modifier = Modifier.weight(1f),
                 singleLine = true
             )
@@ -412,7 +370,8 @@ private fun VStep3Violation(state: ViolationFormState) {
                             state.npaPoint = vt.clause
                             state.violationTypeName = vt.description
                             expanded = false
-                        }
+                        },
+                        modifier = Modifier.background(MaterialTheme.colorScheme.onSecondary)
                     )
                 }
             }

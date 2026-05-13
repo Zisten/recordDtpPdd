@@ -27,10 +27,9 @@ fun MainScreen(
     var violationFormKey by remember { mutableStateOf(0) }
 
     Row(modifier = Modifier.fillMaxSize()) {
-        // Navigation Rail
         NavigationRail(
             modifier = Modifier.fillMaxHeight(),
-            containerColor = MaterialTheme.colorScheme.primaryContainer
+            containerColor = MaterialTheme.colorScheme.onPrimaryContainer
         ) {
             Spacer(Modifier.height(16.dp))
 
@@ -38,17 +37,35 @@ fun MainScreen(
                 icon = { Icon(Icons.Default.Home, contentDescription = "Главная") },
                 label = { Text("Главная") },
                 selected = currentSection == MainSection.HOME,
-                onClick = { currentSection = MainSection.HOME }
+                onClick = { currentSection = MainSection.HOME },
+                colors = NavigationRailItemColors(
+                    selectedIconColor = MaterialTheme.colorScheme.primary,
+                    selectedTextColor = MaterialTheme.colorScheme.surface,
+                    selectedIndicatorColor = MaterialTheme.colorScheme.secondaryContainer,
+                    unselectedIconColor = MaterialTheme.colorScheme.secondaryContainer,
+                    unselectedTextColor = MaterialTheme.colorScheme.secondaryContainer,
+                    disabledIconColor = MaterialTheme.colorScheme.surface,
+                    disabledTextColor = MaterialTheme.colorScheme.surfaceBright
+                )
             )
 
             NavigationRailItem(
-                icon = { Icon(Icons.Default.Warning, contentDescription = "ДТП") },
+                icon = { Icon(Icons.Default.Warning, contentDescription = "ДТП")},
                 label = { Text("Оформление ДТП") },
                 selected = currentSection == MainSection.ACCIDENT_FORM,
                 onClick = {
                     accidentFormKey++
                     currentSection = MainSection.ACCIDENT_FORM
-                }
+                },
+                colors = NavigationRailItemColors(
+                    selectedIconColor = MaterialTheme.colorScheme.primary,
+                    selectedTextColor = MaterialTheme.colorScheme.surface,
+                    selectedIndicatorColor = MaterialTheme.colorScheme.secondaryContainer,
+                    unselectedIconColor = MaterialTheme.colorScheme.secondaryContainer,
+                    unselectedTextColor = MaterialTheme.colorScheme.secondaryContainer,
+                    disabledIconColor = MaterialTheme.colorScheme.surface,
+                    disabledTextColor = MaterialTheme.colorScheme.surfaceBright
+                )
             )
 
             NavigationRailItem(
@@ -58,21 +75,38 @@ fun MainScreen(
                 onClick = {
                     violationFormKey++
                     currentSection = MainSection.VIOLATION_FORM
-                }
+                },
+                colors = NavigationRailItemColors(
+                    selectedIconColor = MaterialTheme.colorScheme.primary,
+                    selectedTextColor = MaterialTheme.colorScheme.surface,
+                    selectedIndicatorColor = MaterialTheme.colorScheme.secondaryContainer,
+                    unselectedIconColor = MaterialTheme.colorScheme.secondaryContainer,
+                    unselectedTextColor = MaterialTheme.colorScheme.secondaryContainer,
+                    disabledIconColor = MaterialTheme.colorScheme.surface,
+                    disabledTextColor = MaterialTheme.colorScheme.surfaceBright
+                )
             )
 
-            // Logout — прижат к низу
             Spacer(Modifier.weight(1f))
             NavigationRailItem(
                 icon = { Icon(Icons.AutoMirrored.Filled.ExitToApp, contentDescription = "Выход") },
                 label = { Text("Выход") },
                 selected = false,
-                onClick = onLogout
+                onClick = onLogout,
+                colors = NavigationRailItemColors(
+                    selectedIconColor = MaterialTheme.colorScheme.primary,
+                    selectedTextColor = MaterialTheme.colorScheme.surface,
+                    selectedIndicatorColor = MaterialTheme.colorScheme.secondaryContainer,
+                    unselectedIconColor = MaterialTheme.colorScheme.secondaryContainer,
+                    unselectedTextColor = MaterialTheme.colorScheme.secondaryContainer,
+                    disabledIconColor = MaterialTheme.colorScheme.surface,
+                    disabledTextColor = MaterialTheme.colorScheme.surfaceBright
+                )
+
             )
             Spacer(Modifier.height(8.dp))
         }
 
-        // Основной контент
         Box(modifier = Modifier.fillMaxSize()) {
             when (currentSection) {
                 MainSection.HOME ->

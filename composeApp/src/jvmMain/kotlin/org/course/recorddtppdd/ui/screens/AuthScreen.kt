@@ -30,14 +30,14 @@ fun AuthScreen(onLoginSuccess: (Officer) -> Unit) {
     ) {
         Card(
             modifier = Modifier.width(400.dp),
-            elevation = CardDefaults.cardElevation(8.dp)
+            elevation = CardDefaults.cardElevation(8.dp),
+            colors = CardDefaults.cardColors()
         ) {
             Column(
                 modifier = Modifier.padding(32.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                // Заголовок
                 Icon(
                     imageVector = Icons.Default.Lock,
                     contentDescription = null,
@@ -45,7 +45,7 @@ fun AuthScreen(onLoginSuccess: (Officer) -> Unit) {
                     tint = MaterialTheme.colorScheme.primary
                 )
                 Text(
-                    text = "Система учёта ДТП и ПДД",
+                    text = "Учёта ДТП и нарушений ПДД",
                     fontSize = 20.sp,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.primary
@@ -58,7 +58,7 @@ fun AuthScreen(onLoginSuccess: (Officer) -> Unit) {
 
                 Spacer(Modifier.height(8.dp))
 
-                // Поле логина
+                // логн
                 OutlinedTextField(
                     value = state.login,
                     onValueChange = { state.login = it },
@@ -68,7 +68,7 @@ fun AuthScreen(onLoginSuccess: (Officer) -> Unit) {
                     singleLine = true
                 )
 
-                // Поле пароля
+                // пароль
                 OutlinedTextField(
                     value = state.password,
                     onValueChange = { state.password = it },
@@ -80,7 +80,6 @@ fun AuthScreen(onLoginSuccess: (Officer) -> Unit) {
                     singleLine = true
                 )
 
-                // Сообщение об ошибке
                 if (state.error.isNotBlank()) {
                     Text(
                         text = state.error,
@@ -89,7 +88,6 @@ fun AuthScreen(onLoginSuccess: (Officer) -> Unit) {
                     )
                 }
 
-                // Кнопка входа
                 Button(
                     onClick = {
                         val officer = state.authenticate()

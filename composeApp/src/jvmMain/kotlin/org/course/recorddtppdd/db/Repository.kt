@@ -30,9 +30,6 @@ object Repository {
 
     // ── Drivers ───────────────────────────────────────────────────────────
 
-    fun getAllDrivers(): List<Driver> = transaction {
-        Drivers.selectAll().map { toDriver(it) }
-    }
 
     fun findDriverById(id: Int): Driver? = transaction {
         Drivers.selectAll()
@@ -123,12 +120,7 @@ object Repository {
         }[Licenses.id]
     }
 
-    fun findLicenseByDriverId(driverId: Int): License? = transaction {
-        Licenses.selectAll()
-            .where { Licenses.driverId eq driverId }
-            .map { toLicense(it) }
-            .lastOrNull()
-    }
+
 
     fun findLicenseBySeriesAndNumber(series: String, number: String): License? = transaction {
         Licenses.selectAll()
@@ -148,9 +140,7 @@ object Repository {
 
     // ── Vehicles ───────────────────────────────────────────────────────────
 
-    fun getAllVehicles(): List<Vehicle> = transaction {
-        Vehicles.selectAll().map { toVehicle(it) }
-    }
+
 
     fun findVehicleByPlate(plate: String): Vehicle? = transaction {
         Vehicles.selectAll()
@@ -159,7 +149,6 @@ object Repository {
             .firstOrNull()
     }
 
-    // НОВЫЙ МЕТОД: Поиск по VIN
     fun findVehicleByVin(vin: String): Vehicle? = transaction {
         Vehicles.selectAll()
             .where { Vehicles.vin eq vin }
@@ -244,7 +233,6 @@ object Repository {
 
     fun insertAccident(
         officerId: Int,
-        typeId: Int?,
         dateTime: LocalDateTime,
         street: String,
         house: String?,
@@ -398,9 +386,6 @@ object Repository {
         return listOfNotNull(last, first, middle?.takeIf { it.isNotBlank() }).joinToString(" ")
     }
 
-    // ... остальной код Repository.kt (оставьте без изменений) ...
-
-    // ── SQL Analytics ─────────────────────────────────────────────────────
 
     // ── SQL Analytics ─────────────────────────────────────────────────────
 

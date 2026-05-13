@@ -4,14 +4,8 @@ import org.jetbrains.exposed.sql.Table
 import org.jetbrains.exposed.sql.javatime.date
 import org.jetbrains.exposed.sql.javatime.datetime
 
-/**
- * Таблицы Exposed, приведённые к РЕАЛЬНОЙ схеме MySQL из вашего SQL.
- *
- * ВАЖНО: имена колонок должны 1-в-1 совпадать с тем, что создано в MySQL,
- * иначе будут ошибки вида "Unknown column ...".
- */
 
-/** Officers(officer_id, ..., login, password) */
+
 object Officers : Table("Officers") {
     val id = integer("officer_id").autoIncrement()
     val login = varchar("login", 255)
@@ -20,7 +14,6 @@ object Officers : Table("Officers") {
     override val primaryKey = PrimaryKey(id)
 }
 
-/** Drivers(driver_id, last_name, first_name, middle_name, birth_date, ..., phone, ...) */
 object Drivers : Table("Drivers") {
     val id = integer("driver_id").autoIncrement()
 
@@ -38,7 +31,6 @@ object Drivers : Table("Drivers") {
     override val primaryKey = PrimaryKey(id)
 }
 
-/** Licenses(license_id, driver_id, series, number, category, issue_date, ...) */
 object Licenses : Table("Licenses") {
     val id = integer("license_id").autoIncrement()
     val driverId = integer("driver_id").references(Drivers.id)
@@ -50,11 +42,9 @@ object Licenses : Table("Licenses") {
     override val primaryKey = PrimaryKey(id)
 }
 
-/** Vehicles(vehicle_id, owner_id, brand, model, number_plate, vin, reg_certificate, insurance_..., has_hull_insurance) */
 object Vehicles : Table("Vehicles") {
     val id = integer("vehicle_id").autoIncrement()
     val ownerId = integer("owner_id").references(Drivers.id).nullable()
-
     val brand = varchar("brand", 255)
     val model = varchar("model", 255)
     val numberPlate = varchar("number_plate", 20)
@@ -70,22 +60,15 @@ object Vehicles : Table("Vehicles") {
     override val primaryKey = PrimaryKey(id)
 }
 
-/** AccidentsRecords(accident_id, officer_id, type_id, date_time, street, house, witnesses_info, circumstances_json, explanation) */
 object AccidentsRecords : Table("AccidentsRecords") {
     val id = integer("accident_id").autoIncrement()
-
     val officerId = integer("officer_id").references(Officers.id)
-
     val dateTime = datetime("date_time")
     val street = varchar("street", 255)
     val house = varchar("house", 255).nullable()
 
     val witnessesInfo = text("witnesses_info").nullable()
 
-    /**
-     * В MySQL это JSON. Чтобы не тащить дополнительные мапперы/модули, храним как TEXT.
-     * (В Exposed нет универсального json<T>() без доп. модулей и версий.)
-     */
     val circumstancesJson = text("circumstances_json").nullable()
 
     val explanation = text("explanation").nullable()
@@ -93,7 +76,6 @@ object AccidentsRecords : Table("AccidentsRecords") {
     override val primaryKey = PrimaryKey(id)
 }
 
-/** AccidentParticipants(participant_id, accident_id, driver_id, vehicle_id, role, impact_spot, damage_details, remarks) */
 object AccidentParticipants : Table("AccidentParticipants") {
     val id = integer("participant_id").autoIncrement()
 
@@ -110,7 +92,6 @@ object AccidentParticipants : Table("AccidentParticipants") {
     override val primaryKey = PrimaryKey(id)
 }
 
-/** ViolationsTypes(type_id, clause, description, fine_amount) */
 object ViolationsTypes : Table("ViolationsTypes") {
     val id = integer("type_id").autoIncrement()
 
@@ -121,7 +102,6 @@ object ViolationsTypes : Table("ViolationsTypes") {
     override val primaryKey = PrimaryKey(id)
 }
 
-/** ViolationRecords(record_id, officer_id, driver_id, vehicle_id, type_id, date_time, street, house_number, witness_victim_info) */
 object ViolationRecords : Table("ViolationRecords") {
     val id = integer("record_id").autoIncrement()
 

@@ -90,7 +90,6 @@ data class HomeStats(
     val violationsToday: Int
 )
 
-// НОВАЯ МОДЕЛЬ ДЛЯ АНАЛИТИКИ
 data class AnalyticsReport(
     val category: String,
     val title: String,
